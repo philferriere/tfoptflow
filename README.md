@@ -37,7 +37,7 @@ The most common measures used to evaluate the quality of optical flow estimation
 The code in this repo was developed and tested using Anaconda3 v.5.2.0. To reproduce our conda environment, please refer to the following files:
 
 *On Ubuntu:*
-- [dlubu36.yml](tfoptflow/setup/dlubu36.yml)
+- [`conda list`](tfoptflow/setup/dlubu36.txt) and [`conda env export`](tfoptflow/setup/dlubu36.yml)
 
 *On Windows:*
 - [`conda list`](tfoptflow/setup/dlwin36.txt) and [`conda env export`](tfoptflow/setup/dlwin36.yml)
