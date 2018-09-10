@@ -40,7 +40,7 @@ class ModelBase:
                 self.opts['display_step'] = 10  # show progress every 10 training batches
                 self.opts['snapshot_step'] = 100  # save trained model every 100 training batches
                 self.opts['val_step'] = 100  # Test trained model on validation split every 1000 training batches
-                if self.opts['lr_boundaries'] == 'multistep':
+                if self.opts['lr_boundaries'] == 'multisteps':
                     self.opts['lr_boundaries'] = [int(boundary / 1000) for boundary in self.opts['lr_boundaries']]
                     self.opts['max_steps'] = self.opts['lr_boundaries'][-1]
                 else:
@@ -272,7 +272,7 @@ class ModelBase:
     def setup_lr_sched(self):
         """Setup a learning rate training schedule and setup the global step. Override as necessary.
         """
-        assert (self.opts['lr_policy'] in [None, 'multistep', 'cyclic'])
+        assert (self.opts['lr_policy'] in [None, 'multisteps', 'cyclic'])
         self.g_step_op = tf.train.get_or_create_global_step()
 
         # Use a set learning rate, if requested
@@ -282,7 +282,7 @@ class ModelBase:
 
         # Use a learning rate schedule, if requested
         assert (self.opts['train_mode'] in ['train', 'fine-tune'])
-        if self.opts['lr_policy'] == 'multistep':
+        if self.opts['lr_policy'] == 'multisteps':
             boundaries = self.opts['lr_boundaries']
             values = self.opts['lr_values']
             if self.opts['train_mode'] == 'train':
@@ -314,7 +314,7 @@ class ModelBase:
         print("\nModel Configuration:")
         for k, v in self.opts.items():
             if self.mode in ['train_noval', 'train_with_val']:
-                if self.opts['lr_policy'] == 'multistep':
+                if self.opts['lr_policy'] == 'multisteps':
                     if k in ['init_lr', 'cyclic_lr_max', 'cyclic_lr_base', 'cyclic_lr_stepsize']:
                         continue
                 if self.opts['lr_policy'] == 'cyclic':

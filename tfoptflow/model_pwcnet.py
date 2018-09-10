@@ -53,12 +53,12 @@ _DEFAULT_PWCNET_TRAIN_OPTIONS = {
     'use_tf_data': True, # Set to True to get data from tf.data.Dataset when training/validating; otherwise, use feed_dict with numpy
     # Training config and hyper-params
     'batch_size' : 8,
-    'lr_policy' : 'multistep', # choose between None, 'multistep', and 'cyclic'; adjust the max_steps below too
+    'lr_policy' : 'multisteps', # choose between None, 'multisteps', and 'cyclic'; adjust the max_steps below too
     # Multistep lr schedule
-    'init_lr': 0.0001,  # initial learning rate
+    'init_lr': 1e-04,  # initial learning rate
     'max_steps': 1200000, # max number of training iterations (i.e., batches to run)
     'lr_boundaries': [400000, 600000, 800000, 1000000, 1200000], # step schedule boundaries
-    'lr_values': [0.0001, 5e-05, 2.5e-05, 1.25e-05, 6.25e-06], # step schedule values
+    'lr_values': [0.0001, 5e-05, 2.5e-05, 1.25e-05, 6.25e-06, 3.125e-06], # step schedule values
     # Cyclic lr schedule
     'cyclic_lr_max': 0.0004,  # maximum bound
     'cyclic_lr_base': 0.00001,  # maximum bound
@@ -101,12 +101,12 @@ _DEFAULT_PWCNET_FINETUNE_OPTIONS = {
     'use_tf_data': True, # Set to True to get data from tf.data.Dataset when training/validating; otherwise, use feed_dict with numpy
     # Training config and hyper-params
     'batch_size' : 4,
-    'lr_policy' : 'multistep', # choose between None, 'multistep', and 'cyclic'; adjust the max_steps below too
+    'lr_policy' : 'multisteps', # choose between None, 'multisteps', and 'cyclic'; adjust the max_steps below too
     # Multistep lr schedule
-    'init_lr': 0.00001,  # initial learning rate
+    'init_lr': 1e-05,  # initial learning rate
     'max_steps': 500000, # max number of training iterations (i.e., batches to run)
     'lr_boundaries': [200000, 300000, 400000, 500000], # step schedule boundaries
-    'lr_values': [1e-05, 5e-06, 2.5e-06, 1.25e-06], # step schedule values
+    'lr_values': [1e-05, 5e-06, 2.5e-06, 1.25e-06, 6.25e-07], # step schedule values
     # Cyclic lr schedule
     'cyclic_lr_max': 2e-05,  # maximum bound
     'cyclic_lr_base': 1e-06,  # maximum bound

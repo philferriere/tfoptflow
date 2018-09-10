@@ -1026,7 +1026,7 @@ class OpticalFlowDataset(object):
                     batch_size=batch_size * num_gpus, num_parallel_batches=threads))
 
         elif split == 'val':
-            assert(self.mode in ['val', 'val_notrain'])
+            assert(self.mode in ['val', 'val_notrain', 'train_noval', 'train_with_val'])
             tf_ds = tf.data.Dataset.from_tensor_slices(self._val_idx)
             tf_ds = tf_ds.apply(tf.contrib.data.shuffle_and_repeat(buffer_size=len(self._val_idx), count=-1))
             tf_ds = tf_ds.apply(tf.contrib.data.map_and_batch(
