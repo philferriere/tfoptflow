@@ -152,7 +152,7 @@ It is especially hard for this -- and any other 2-frame based motion estimator! 
 
 ![](img/error_analysis_10_worst.png)
 
-Still, when the average motion is moderate, despite our very aggressive training schedule, both the small and large models generate remarkable results:
+Still, when the average motion is moderate, both the small and large models generate remarkable results:
 
 ![](img/error_analysis_10_best.png)
 
