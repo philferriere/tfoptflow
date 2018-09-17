@@ -70,7 +70,7 @@ If you don't want to use the long training schedule, but still would like to pla
 We also measured the following inference times on a GTX 1080 GPU:
 
 | Model name | MPI-Sintel Inference (1080 GPU) |
-| :---: :---: |
+| :---: | :---: |
 | `pwcnet-lg-6-2-cyclic-chairsthingsmix` | 80.96ms [notebook](tfoptflow/pwcnet_eval_lg-6-2-cyclic-chairsthingsmix_mpisintelclean.ipynb)|
 | `pwcnet-sm-6-2-cyclic-chairsthingsmix` | 64.37ms [notebook](tfoptflow/pwcnet_eval_sm-6-2-cyclic-chairsthingsmix_mpisintelclean.ipynb)|
 
