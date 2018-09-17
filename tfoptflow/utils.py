@@ -13,6 +13,7 @@ import os
 import numpy as np
 import cv2
 
+
 def clean_dst_file(dst_file):
     """Create the output folder, if necessary; empty the output folder of previous predictions, if any
     Args:
@@ -26,6 +27,7 @@ def clean_dst_file(dst_file):
     # Empty the output folder of previous predictions, if any
     if os.path.exists(dst_file):
         os.remove(dst_file)
+
 
 def scale(img, zoom_factor):
     """
@@ -43,7 +45,7 @@ def scale(img, zoom_factor):
     height, width = img.shape[:2]  # It's also the final desired shape
     new_height, new_width = int(height * zoom_factor), int(width * zoom_factor)
 
-    ### Crop only the part that will remain in the result (more efficient)
+    # Crop only the part that will remain in the result (more efficient)
     # Centered bbox of the final desired size in resized (larger/smaller) image coordinates
     y1, x1 = max(0, new_height - height) // 2, max(0, new_width - width) // 2
     y2, x2 = y1 + height, x1 + width

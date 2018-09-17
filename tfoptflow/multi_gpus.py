@@ -17,11 +17,11 @@ Based on:
 
     - TensorFlow - Multi GPU Computation
     http://blog.s-schoener.com/2017-12-15-parallel-tensorflow-intro/
-    Writtern by Sebastian Schöner, License unknown
+    Written by Sebastian Schöner, License unknown
 
     - Tensorflow Multi-GPU VAE-GAN implementation
     https://timsainb.github.io/multi-gpu-vae-gan-in-tensorflow.html
-    Writtern by Sebastian Schöner, License unknown
+    Written by Sebastian Schöner, License unknown
 """
 
 from __future__ import absolute_import, division, print_function
@@ -30,6 +30,7 @@ import tensorflow as tf
 
 PS_OPS = ['Variable', 'VariableV2', 'AutoReloadVariable',
           'MutableHashTable', 'MutableHashTableOfTensors', 'MutableDenseHashTable']
+
 
 def assign_to_device(ops_device, var_device):
     """Returns a function to place variables on the var_device.
@@ -53,6 +54,7 @@ def assign_to_device(ops_device, var_device):
 
     return _assign
 
+
 def get_available_gpus():
     """Returns a list of the identifiers of all visible GPUs.
     Ref:
@@ -61,6 +63,7 @@ def get_available_gpus():
     """
     local_device_protos = device_lib.list_local_devices()
     return [x.name for x in local_device_protos if x.device_type == 'GPU']
+
 
 def average_gradients(tower_grads):
     """Calculate the average gradient for each shared variable across all towers. A tower is the name used to describe

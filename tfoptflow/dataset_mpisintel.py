@@ -16,9 +16,11 @@ from dataset_base import OpticalFlowDataset, _DATASET_ROOT, _DEFAULT_DS_TRAIN_OP
 
 _MPISINTEL_ROOT = _DATASET_ROOT + 'MPI-Sintel'
 
+
 class MPISintelDataset(OpticalFlowDataset):
     """MPI-Sintel optical flow dataset.
     """
+
     def __init__(self, mode='train_with_val', ds_root=_MPISINTEL_ROOT, options=_DEFAULT_DS_TRAIN_OPTIONS):
         """Initialize the MPISintelDataset object
         Args:
@@ -26,9 +28,9 @@ class MPISintelDataset(OpticalFlowDataset):
             ds_root: Path to the root of the dataset
             options: see base class documentation
         """
-        self.min_flow_mag = 0.
-        self.avg_flow_mag = 13.495569229125977
-        self.max_flow_mag = 455.44061279296875
+        self.min_flow = 0.
+        self.avg_flow = 13.495569229125977
+        self.max_flow = 455.44061279296875
         super().__init__(mode, ds_root, options)
         assert(self.opts['type'] in ['clean', 'final'])
 
@@ -36,22 +38,22 @@ class MPISintelDataset(OpticalFlowDataset):
         """Set the train, val, test, label and prediction label folders.
         Overriden by each dataset. Called by the base class on init.
         Sample results:
-            self._train_folder           = 'E:/datasets/MPI-Sintel/training/final'
-            self._train_label_folder     = 'E:/datasets/MPI-Sintel/training/flow'
-            self._val_folder             = 'E:/datasets/MPI-Sintel/training/final'
-            self._val_label_folder       = 'E:/datasets/MPI-Sintel/training/flow'
-            self._val_pred_label_folder  = 'E:/datasets/MPI-Sintel/training/final_flow_pred'
-            self._test_folder            = 'E:/datasets/MPI-Sintel/test/final'
-            self._test_pred_label_folder = 'E:/datasets/MPI-Sintel/test/final_flow_pred'
+            self._trn_dir          = 'E:/datasets/MPI-Sintel/training/final'
+            self._trn_lbl_dir      = 'E:/datasets/MPI-Sintel/training/flow'
+            self._val_dir          = 'E:/datasets/MPI-Sintel/training/final'
+            self._val_lbl_dir      = 'E:/datasets/MPI-Sintel/training/flow'
+            self._val_pred_lbl_dir = 'E:/datasets/MPI-Sintel/training/final_flow_pred'
+            self._tst_dir          = 'E:/datasets/MPI-Sintel/test/final'
+            self._tst_pred_lbl_dir = 'E:/datasets/MPI-Sintel/test/final_flow_pred'
         """
-        self._train_folder = f"{self._ds_root}/training/{self.opts['type']}"
-        self._val_folder = self._train_folder
-        self._test_folder = f"{self._ds_root}/test/{self.opts['type']}"
+        self._trn_dir = f"{self._ds_root}/training/{self.opts['type']}"
+        self._val_dir = self._trn_dir
+        self._tst_dir = f"{self._ds_root}/test/{self.opts['type']}"
 
-        self._train_label_folder = f"{self._ds_root}/training/flow"
-        self._val_label_folder = self._train_label_folder
-        self._val_pred_label_folder = f"{self._ds_root}/training/{self.opts['type']}_flow_pred"
-        self._test_pred_label_folder = f"{self._ds_root}/test/{self.opts['type']}_flow_pred"
+        self._trn_lbl_dir = f"{self._ds_root}/training/flow"
+        self._val_lbl_dir = self._trn_lbl_dir
+        self._val_pred_lbl_dir = f"{self._ds_root}/training/{self.opts['type']}_flow_pred"
+        self._tst_pred_lbl_dir = f"{self._ds_root}/test/{self.opts['type']}_flow_pred"
 
     def set_IDs_filenames(self):
         """Set the names of the train/val/test files that will hold the list of sample/label IDs
@@ -61,9 +63,9 @@ class MPISintelDataset(OpticalFlowDataset):
             'E:/datasets/MPI-Sintel/final_val.txt'
             'E:/datasets/MPI-Sintel/final_test.txt'
         """
-        self._train_IDs_file = f"{self._ds_root}/{self.opts['type']}_train_{self.opts['val_split']}split.txt"
+        self._trn_IDs_file = f"{self._ds_root}/{self.opts['type']}_train_{self.opts['val_split']}split.txt"
         self._val_IDs_file = f"{self._ds_root}/{self.opts['type']}_val_{self.opts['val_split']}split.txt"
-        self._test_IDs_file = f"{self._ds_root}/{self.opts['type']}_test.txt"
+        self._tst_IDs_file = f"{self._ds_root}/{self.opts['type']}_test.txt"
 
     def _build_ID_sets(self):
         """Build the list of samples and their IDs, split them in the proper datasets.
@@ -74,9 +76,9 @@ class MPISintelDataset(OpticalFlowDataset):
         """
         # Search the train folder for the samples, create string IDs for them
         self._IDs = []
-        for video in os.listdir(self._train_folder): # video: 'alley_1'
-            frames = sorted(os.listdir(self._train_folder + '/' + video))
-            for idx in range(len(frames)-1):
+        for video in os.listdir(self._trn_dir):  # video: 'alley_1'
+            frames = sorted(os.listdir(self._trn_dir + '/' + video))
+            for idx in range(len(frames) - 1):
                 frame1_ID = f'{video}/{frames[idx]}'
                 frame2_ID = f'{video}/{frames[idx+1]}'
                 flow_ID = f'{video}/{frames[idx].replace(".png", ".flo")}'
@@ -84,25 +86,25 @@ class MPISintelDataset(OpticalFlowDataset):
 
         # Build the train/val datasets
         if self.opts['val_split'] > 0.:
-            self._train_IDs, self._val_IDs = train_test_split(self._IDs, test_size=self.opts['val_split'],
-                                                                  random_state=self.opts['random_seed'])
+            self._trn_IDs, self._val_IDs = train_test_split(self._IDs, test_size=self.opts['val_split'],
+                                                            random_state=self.opts['random_seed'])
         else:
-            self._train_IDs, self._val_IDs = self._IDs, None
+            self._trn_IDs, self._val_IDs = self._IDs, None
 
         # Build the test dataset
-        self._test_IDs = []
-        for video in os.listdir(self._test_folder): # video: 'ambush_1'
-            frames = sorted(os.listdir(self._test_folder + '/' + video))
-            for idx in range(len(frames)-1):
+        self._tst_IDs = []
+        for video in os.listdir(self._tst_dir):  # video: 'ambush_1'
+            frames = sorted(os.listdir(self._tst_dir + '/' + video))
+            for idx in range(len(frames) - 1):
                 frame1_ID = f'{video}/{frames[idx]}'
                 frame2_ID = f'{video}/{frames[idx+1]}'
                 flow_ID = f'{video}/{frames[idx].replace(".png", ".flo")}'
-                self._test_IDs.append((frame1_ID, frame2_ID, flow_ID))
+                self._tst_IDs.append((frame1_ID, frame2_ID, flow_ID))
 
         # Build a list of simplified IDs for Tensorboard logging
-        self._train_IDs_simplified = self.simplify_IDs(self._train_IDs)
-        self._val_IDs_simplified = self.simplify_IDs(self._val_IDs)
-        self._test_IDs_simplified = self.simplify_IDs(self._test_IDs)
+        self._trn_IDs_simpl = self.simplify_IDs(self._trn_IDs)
+        self._val_IDs_simpl = self.simplify_IDs(self._val_IDs)
+        self._tst_IDs_simpl = self.simplify_IDs(self._tst_IDs)
 
     def simplify_IDs(self, IDs):
         """Simplify list of ID ID string tuples.

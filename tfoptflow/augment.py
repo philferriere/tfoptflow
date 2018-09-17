@@ -17,21 +17,23 @@ To look at later:
 from __future__ import absolute_import, division, print_function
 import numpy as np
 import cv2
-import random # so we don't interfere with the use of np.random in the dataset loader
+import random  # so we don't interfere with the use of np.random in the dataset loader
 
 from utils import scale
 
 _DBG_AUG_SET = -1
 
 _DEFAULT_AUG_OPTIONS = {
-    'aug_type': 'heavy', # in ['basic', 'heavy']
-    'aug_labels': True, # If True, augment both images and labels; otherwise, only augment images
-    'fliplr' : 0.5, # Horizontally flip 50% of images
-    'flipud' : 0.5, # Vertically flip 50% of images
-    'translate' : (0.5, 0.05), # Translate 50% of images by a value between -5 and +5 percent of original size on x- and y-axis independently
-    'scale' : (0.5, 0.05), # Scale 50% of images by a factor between 95 and 105 percent of original size
-    'random_seed' : 1969,
+    'aug_type': 'heavy',  # in ['basic', 'heavy']
+    'aug_labels': True,  # If True, augment both images and labels; otherwise, only augment images
+    'fliplr': 0.5,  # Horizontally flip 50% of images
+    'flipud': 0.5,  # Vertically flip 50% of images
+    # Translate 50% of images by a value between -5 and +5 percent of original size on x- and y-axis independently
+    'translate': (0.5, 0.05),
+    'scale': (0.5, 0.05),  # Scale 50% of images by a factor between 95 and 105 percent of original size
+    'random_seed': 1969,
 }
+
 
 class Augmenter(object):
     """Augmenter class.
@@ -49,7 +51,7 @@ class Augmenter(object):
         random.seed(self.opts['random_seed'])
 
     ###
-    ### Augmentation
+    # Augmentation
     ###
     def augment(self, images, labels=None, as_tuple=False):
         """Augment training samples.
@@ -62,16 +64,16 @@ class Augmenter(object):
             aug_labels: list or array of augmented optical flows.
         """
         # Augment image pairs
-        assert(type(images) is list or type(images) is np.ndarray)
+        assert(isinstance(images, list) or isinstance(images, np.ndarray))
         if labels is not None:
-            assert(type(labels) is list or type(labels) is np.ndarray)
+            assert(isinstance(labels, list) or isinstance(labels, np.ndarray))
         do_labels = True if self.opts['aug_labels'] and labels is not None else False
 
         aug_images, aug_labels = [], []
         for idx in range(len(images)):
             img_pair = images[idx]
-            assert(len(img_pair[0].shape) == 3 and (img_pair[0].shape[2]==1 or img_pair[0].shape[2]==3))
-            assert(len(img_pair[1].shape) == 3 and (img_pair[1].shape[2]==1 or img_pair[1].shape[2]==3))
+            assert(len(img_pair[0].shape) == 3 and (img_pair[0].shape[2] == 1 or img_pair[0].shape[2] == 3))
+            assert(len(img_pair[1].shape) == 3 and (img_pair[1].shape[2] == 1 or img_pair[1].shape[2] == 3))
 
             aug_img_pair = [np.copy(img_pair[0]), np.copy(img_pair[1])]
             if do_labels:
@@ -124,10 +126,10 @@ class Augmenter(object):
                 aug_labels.append(aug_flow)
 
         # Return using image in the same format as the input
-        if type(images) is np.ndarray:
+        if isinstance(images, np.ndarray):
             aug_images = np.asarray(aug_images)
         if do_labels:
-            if type(labels) is np.ndarray:
+            if isinstance(labels, np.ndarray):
                 aug_labels = np.asarray(aug_labels)
 
         if do_labels:
@@ -136,12 +138,10 @@ class Augmenter(object):
             return aug_images
 
     ###
-    ### Debug utils
+    # Debug utils
     ###
     def print_config(self):
         """Display configuration values."""
         print("\nAugmenter Configuration:")
         for k, v in self.options.items():
             print("  {:20} {}".format(k, v))
-
-

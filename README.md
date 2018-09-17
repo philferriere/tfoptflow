@@ -4,7 +4,9 @@ This repo provides a TensorFlow-based implementation of the wonderful paper "PWC
 
 There are already a few attemps at implementing PWC-Net using TensorFlow out there. However, they either use outdated architectures of the paper's CNN networks, only provide TF inference (no TF training), only work on Linux platforms, and do not support multi-GPU training.
 
-This implementation provides **both TF-based training and inference**. It is **portable**. Because it doesn't use any dynamically loaded CUDA-based tensorflow user ops, it **works on Linux and Windows**. It also **supports multi-GPU training** (the notebooks and results shown here were collected on a GTX 1080 Ti paired with a Titan X).
+This implementation provides **both TF-based training and inference**. It is **portable**: because it doesn't use any dynamically loaded CUDA-based tensorflow user ops, it **works on Linux and Windows**. It also **supports multi-GPU training** (the notebooks and results shown here were collected on a GTX 1080 Ti paired with a Titan X). Even though the code **allows for mixed-precision training**, we were unable to make the training converge (so, only use this feature at your own risk!).
+
+Finally, as shown in the ["Links to pre-trained models"](#links) section, we achieve comparable results to the ones reported in the official paper.
 
 # Table of Contents
 
@@ -46,12 +48,31 @@ The code in this repo was developed and tested using Anaconda3 v.5.2.0. To repro
 
 Pre-trained models can be found [here](http://bit.ly/tfoptflow). They come in two flavors: "small" (`sm`) models don't use dense connections or residual connections, "large" (`lg`) models do. They are all built with a 6-level pyramid, upsampling level 2 by 4 in each dimension to generate the final prediction, and construct an 81-channel cost volume at each level from a search range (maximum displacement) of 4.
 
-Please note that we trained these models using a very short **cyclic learning rate schedule of our own** (100k iters, batch size 8), not the official -- and rather long -- multistep schedule discussed in [[2018a]](#2018a) (1.2M iters, batch size 8 + 500k iters finetuning, batch size 4). The code in this repo does implement the official schedule, however. If you end up using the multistep schedule, we would love to add your pre-trained model to the list below:
+Please note that we trained these models using slightly different dataset and learning rate schedules. The official multistep schedule discussed in [[2018a]](#2018a) is as follows: S<sub>long</sub> 1.2M iters training, batch size 8 + S<sub>fine</sub> 500k iters finetuning, batch size 4). Ours is S<sub>long</sub> only, 1.2M iters, batch size 8, on a mix of `FlyingChairs` and `FlyingThings3DHalfRes`. `FlyingThings3DHalfRes` is our own version of `FlyingThings3` where every input image pair and groundtruth flow has ben downsampled by two in each dimension. We also use a different set of augmentation techniques.
 
-| Model name | Noteboks | MPI-Sintel clean EPE | MPI-Sintel Inference (1080 GPU) |
-| --- | --- | :---: | :---: |
-| `pwcnet-lg-6-2-cyclic-chairsthingsmix` | [train](tfoptflow/pwcnet_train_lg-6-2-cyclic-chairsthingsmix.ipynb) and [eval](tfoptflow/pwcnet_eval_lg-6-2-cyclic-chairsthingsmix_mpisintelclean.ipynb) | 4.14 | 76.46ms |
-| `pwcnet-sm-6-2-cyclic-chairsthingsmix` | [train](tfoptflow/pwcnet_train_sm-6-2-cyclic-chairsthingsmix.ipynb) and [eval](tfoptflow/pwcnet_eval_sm-6-2-cyclic-chairsthingsmix_mpisintelclean.ipynb) | 4.49 | 57.28ms |
+| Model name | Noteboks | FlyingChairs AEPE | Sintel clean AEPE | Sintel final AEPE |
+| :---: | :---: | :---: | :---: | :---: |
+| `pwcnet-lg-6-2-multisteps-chairsthingsmix` | [train](tfoptflow/pwcnet_train_lg-6-2-multisteps-chairsthingsmix.ipynb) | 1.57 ([notebook](tfoptflow/pwcnet_eval_lg-6-2-multisteps-chairsthingsmix_flyingchairs.ipynb)) | 2.83 ([notebook](tfoptflow/pwcnet_eval_lg-6-2-multisteps-chairsthingsmix_mpisintelclean.ipynb)) | 3.86 ([notebook](tfoptflow/pwcnet_eval_lg-6-2-multisteps-chairsthingsmix_mpisintelfinal.ipynb)) |
+| `pwcnet-sm-6-2-multisteps-chairsthingsmix` | coming soon | coming soon | coming soon | coming soon |
+
+As a reference, here are the official, reported results:
+
+![](img/pwc-net-results.png)
+
+
+If you don't want to use the long training schedule, but still would like to play with this code, try our very short **cyclic learning rate schedule** (100k iters, batch size 8). The results are nowhere near as good, but they allow **for quick experimentation**:
+
+| Model name | Noteboks | FlyingChairs AEPE | Sintel clean AEPE | Sintel final AEPE |
+| :---: | :---:| :---: | :---: | :---: |
+| `pwcnet-lg-6-2-cyclic-chairsthingsmix` | [train](tfoptflow/pwcnet_train_lg-6-2-cyclic-chairsthingsmix.ipynb) | 2.67 ([notebook](tfoptflow/pwcnet_eval_lg-6-2-cyclic-chairsthingsmix_flyingchairs.ipynb)) | 3.99 ([notebook](tfoptflow/pwcnet_eval_lg-6-2-cyclic-chairsthingsmix_mpisintelclean.ipynb)) | 5.08 ([notebook](tfoptflow/pwcnet_eval_lg-6-2-cyclic-chairsthingsmix_mpisintelfinal.ipynb)) |
+| `pwcnet-sm-6-2-cyclic-chairsthingsmix` | [train](tfoptflow/pwcnet_train_sm-6-2-cyclic-chairsthingsmix.ipynb) | 2.79 ([notebook](tfoptflow/pwcnet_eval_sm-6-2-cyclic-chairsthingsmix_flyingchairs.ipynb)) | 4.34 ([notebook](tfoptflow/pwcnet_eval_sm-6-2-cyclic-chairsthingsmix_mpisintelclean.ipynb)) | 5.3 ([notebook](tfoptflow/pwcnet_eval_sm-6-2-cyclic-chairsthingsmix_mpisintelfinal.ipynb))|
+
+We also measured the following inference times on a GTX 1080 GPU:
+
+| Model name | MPI-Sintel Inference (1080 GPU) |
+| :---: :---: |
+| `pwcnet-lg-6-2-cyclic-chairsthingsmix` | 80.96ms [notebook](tfoptflow/pwcnet_eval_lg-6-2-cyclic-chairsthingsmix_mpisintelclean.ipynb)|
+| `pwcnet-sm-6-2-cyclic-chairsthingsmix` | 64.37ms [notebook](tfoptflow/pwcnet_eval_sm-6-2-cyclic-chairsthingsmix_mpisintelclean.ipynb)|
 
 
 # PWC-Net

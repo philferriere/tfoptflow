@@ -16,6 +16,7 @@ Based on:
 from __future__ import absolute_import, division, print_function
 import tensorflow as tf
 
+
 def cost_volume(c1, warp, search_range, name):
     """Build cost volume for associating a pixel from Image1 with its corresponding pixels in Image2.
     Args:
@@ -31,7 +32,7 @@ def cost_volume(c1, warp, search_range, name):
     for y in range(0, max_offset):
         for x in range(0, max_offset):
             slice = tf.slice(padded_lvl, [0, y, x, 0], [-1, h, w, -1])
-            cost = tf.reduce_mean(c1*slice, axis=3, keepdims=True)
+            cost = tf.reduce_mean(c1 * slice, axis=3, keepdims=True)
             cost_vol.append(cost)
     cost_vol = tf.concat(cost_vol, axis=3)
     cost_vol = tf.nn.leaky_relu(cost_vol, alpha=0.1, name=name)

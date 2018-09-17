@@ -14,9 +14,12 @@ Based on:
 """
 
 from __future__ import absolute_import, division, print_function
-import os, glob, json
+import os
+import glob
+import json
 import numpy as np
 import tensorflow as tf
+
 
 class BestCheckpointSaver(object):
     """Maintains a directory containing only the best n checkpoints
@@ -29,6 +32,7 @@ class BestCheckpointSaver(object):
     non-distributed settings.  It is not intended to work with the tf.Estimator
     framework.
     """
+
     def __init__(self, save_dir, save_file, num_to_keep=5, maximize=True, saver=None):
         """Creates a `BestCheckpointSaver`
 
@@ -168,4 +172,3 @@ class BestCheckpointSaver(object):
                                reverse=self._maximize)
         ]
         return best_checkpoints
-

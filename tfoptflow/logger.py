@@ -28,6 +28,7 @@ import numpy as np
 
 from visualize import plot_img_pairs_w_flows
 
+
 class TBLogger(object):
     """Logging in tensorboard without tensorflow ops."""
 
@@ -76,14 +77,14 @@ class TBLogger(object):
         im_summaries = []
         for n in range(len(images)):
             # Write the image to a string
-            faux_file = BytesIO() # StringIO()
+            faux_file = BytesIO()  # StringIO()
             if len(images[n].shape) == 3 and images[n].shape[2] == 1:
                 image = np.squeeze(images[n], axis=-1)  # (H, W, 1) -> (H, W)
                 cmap = 'gray'
             else:
                 image = images[n]
                 cmap = None
-            plt.imsave(faux_file, image, cmap=cmap, format='png') # (?, H, W, ?)
+            plt.imsave(faux_file, image, cmap=cmap, format='png')  # (?, H, W, ?)
             # Create an Image object
             img_sum = tf.Summary.Image(encoded_image_string=faux_file.getvalue(), height=image.shape[0],
                                        width=image.shape[1])
@@ -127,6 +128,7 @@ class TBLogger(object):
         self.writer.add_summary(summary, step)
         self.writer.flush()
 
+
 class OptFlowTBLogger(TBLogger):
     """Logging of optical flows and pyramids in tensorboard without tensorflow ops."""
 
@@ -135,7 +137,7 @@ class OptFlowTBLogger(TBLogger):
         """
         super().__init__(log_dir, tag, graph)
 
-    def log_imgs_w_flows(self, tag, img_pairs, flow_pyrs, num_lvls, flow_preds, flow_gts, step, IDs=None, info_texts=None):
+    def log_imgs_w_flows(self, tag, img_pairs, flow_pyrs, num_lvls, flow_preds, flow_gts, step, IDs=None, info=None):
         """Logs a list of optical flows.
         Args:
             tag: format for the name of the summary (will format ID accordingly)
@@ -156,10 +158,10 @@ class OptFlowTBLogger(TBLogger):
             flow_pred = np.expand_dims(flow_preds[n], axis=0) if flow_preds is not None else None
             gt_flow = np.expand_dims(flow_gts[n], axis=0) if flow_gts is not None else None
 
-            plt = plot_img_pairs_w_flows(img_pair, flow_pyr, num_lvls, flow_pred, gt_flow, None, info_texts)
+            plt = plot_img_pairs_w_flows(img_pair, flow_pyr, num_lvls, flow_pred, gt_flow, None, info)
 
             # Write the image to a string
-            faux_file = BytesIO() # StringIO()
+            faux_file = BytesIO()  # StringIO()
             plt.savefig(faux_file, bbox_inches='tight', pad_inches=0.1)
             plt.close()
 
@@ -173,4 +175,3 @@ class OptFlowTBLogger(TBLogger):
         # Create and write Summary
         summary = tf.Summary(value=im_summaries)
         self.writer.add_summary(summary, step)
-

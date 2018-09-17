@@ -17,8 +17,10 @@ from ckpt_mgr import BestCheckpointSaver
 from logger import OptFlowTBLogger
 from dataset_base import _DBG_TRAIN_VAL_TEST_SETS
 from lr import lr_multisteps_long, lr_multisteps_fine, lr_cyclic_long, lr_cyclic_fine
+from mixed_precision import float32_variable_storage_getter
 
 _DEBUG_USE_REF_IMPL = False
+
 
 class ModelBase:
     def __init__(self, name='base', mode='train_with_val', session=None, options=None):
@@ -33,7 +35,7 @@ class ModelBase:
         self.y_hat_train_tnsr = self.y_hat_val_tnsr = self.y_hat_test_tnsr = None
         self.name = name
         self.num_gpus = len(self.opts['gpu_devices'])
-        self.dbg = False # Set this to True for a detailed log of operation
+        self.dbg = False  # Set this to True for a detailed log of operation
 
         if _DBG_TRAIN_VAL_TEST_SETS != -1:  # Debug mode only
             if self.mode in ['train_noval', 'train_with_val']:
@@ -54,7 +56,7 @@ class ModelBase:
         self.build_graph()
 
     ###
-    ### Session mgmt
+    # Session mgmt
     ###
     def config_session(self, sess):
         """Configure a TF session, if one doesn't already exist.
@@ -67,14 +69,14 @@ class ModelBase:
             if self.dbg:
                 config.log_device_placement = True
             config.allow_soft_placement = True
-            self.sess = tf.Session(config = config)
+            self.sess = tf.Session(config=config)
         else:
             self.sess = sess
 
         tf.logging.set_verbosity(tf.logging.INFO)
 
     ###
-    ### Training-specific helpers
+    # Training-specific helpers
     ###
     def config_train_ops(self):
         """Configure training ops. Override this to train your model.
@@ -96,7 +98,7 @@ class ModelBase:
             self.tb_train = OptFlowTBLogger(self.opts['ckpt_dir'], 'train')
 
     ###
-    ### Checkpoint mgmt
+    # Checkpoint mgmt
     ###
     def init_saver(self):
         """Creates a default saver to load/save model checkpoints. Override, if necessary.
@@ -112,7 +114,8 @@ class ModelBase:
             ranking_value: The ranking value by which to rank the checkpoint.
         """
         assert(self.mode in ['train_noval', 'train_with_val'])
-        if self.opts['verbose']: print("Saving model...")
+        if self.opts['verbose']:
+            print("Saving model...")
 
         # save_path = self.saver.save(self.sess, self.opts['ckpt_dir'] + self.name, self.g_step_op)
         save_path = self.saver.save(ranking_value, self.sess, self.g_step_op)
@@ -134,13 +137,15 @@ class ModelBase:
             if self.opts['train_mode'] == 'fine-tune':
                 # In fine-tuning mode, we just want to load the trained params from the file and that's it...
                 assert(tf.train.checkpoint_exists(self.opts['ckpt_path']))
-                if self.opts['verbose']: print(f"Initializing from pre-trained model at {self.opts['ckpt_path']} for finetuning...\n")
+                if self.opts['verbose']:
+                    print(f"Initializing from pre-trained model at {self.opts['ckpt_path']} for finetuning...\n")
                 # ...however, the AdamOptimizer also stores variables in the graph, so reinitialize them as well
                 self.sess.run(tf.variables_initializer(self.optim.variables()))
                 # Now initialize the trained params with actual values from the checkpoint
                 _saver = tf.train.Saver(var_list=tf.trainable_variables())
                 _saver.restore(self.sess, self.opts['ckpt_path'])
-                if self.opts['verbose']: print("... model initialized")
+                if self.opts['verbose']:
+                    print("... model initialized")
                 self.last_ckpt = self.opts['ckpt_path']
             else:
                 # In training mode, we either want to start a new training session or resume from a previous checkpoint
@@ -150,25 +155,31 @@ class ModelBase:
 
                 if self.last_ckpt:
                     # We're resuming a session -> initialize the graph with the content of the checkpoint
-                    if self.opts['verbose']: print(f"Initializing model from previous checkpoint {self.last_ckpt} to resume training...\n")
+                    if self.opts['verbose']:
+                        print(f"Initializing model from previous checkpoint {self.last_ckpt} to resume training...\n")
                     self.saver.restore(self.sess, self.last_ckpt)
-                    if self.opts['verbose']: print("... model initialized")
+                    if self.opts['verbose']:
+                        print("... model initialized")
                 else:
                     # Initialize all the variables of the graph
-                    if self.opts['verbose']: print(f"Initializing model with random values for initial training...\n")
+                    if self.opts['verbose']:
+                        print(f"Initializing model with random values for initial training...\n")
                     assert (self.mode in ['train_noval', 'train_with_val'])
                     self.sess.run(tf.global_variables_initializer())
-                    if self.opts['verbose']: print("... model initialized")
+                    if self.opts['verbose']:
+                        print("... model initialized")
         else:
             # Initialize the graph with the content of the checkpoint
             self.last_ckpt = self.opts['ckpt_path']
             assert(self.last_ckpt is not None)
-            if self.opts['verbose']: print(f"Loading model checkpoint {self.last_ckpt} for eval or testing...\n")
+            if self.opts['verbose']:
+                print(f"Loading model checkpoint {self.last_ckpt} for eval or testing...\n")
             self.saver.restore(self.sess, self.last_ckpt)
-            if self.opts['verbose']: print("... model loaded")
+            if self.opts['verbose']:
+                print("... model loaded")
 
     ###
-    ### Model mgmt
+    # Model mgmt
     ###
     def build_model(self):
         """Build model. Override this.
@@ -181,7 +192,7 @@ class ModelBase:
         raise NotImplementedError
 
     ###
-    ### Graph mgmt
+    # Graph mgmt
     ###
     def config_placeholders(self):
         """Configure input and output tensors
@@ -212,18 +223,27 @@ class ModelBase:
         # Also, config train logger and, optionally, val logger
         # In validation mode, configure validation ops (loss, metrics)
         if self.mode in ['train_noval', 'train_with_val']:
-            if self.num_gpus == 1:
-                self.build_model()
-                self.config_train_ops()
+            if self.opts['use_mixed_precision'] is True:
+                with tf.variable_scope('fp32_vars', custom_getter=float32_variable_storage_getter):
+                    if self.num_gpus == 1:
+                        self.build_model()
+                        self.config_train_ops()
+                    else:
+                        self.build_model_towers()
             else:
-                self.build_model_towers()
+                if self.num_gpus == 1:
+                    self.build_model()
+                    self.config_train_ops()
+                else:
+                    self.build_model_towers()
+
             self.config_loggers()
 
         elif self.mode in ['val', 'val_notrain']:
             self.build_model()
             self.setup_metrics_ops()
 
-        else: # inference mode
+        else:  # inference mode
             self.build_model()
 
         # Set output tensors
@@ -234,7 +254,7 @@ class ModelBase:
         self.load_ckpt()
 
     ###
-    ### Sample mgmt (preprocessing and postprocessing)
+    # Sample mgmt (preprocessing and postprocessing)
     ###
     def adapt_x(self, x):
         """Preprocess the input samples to adapt them to the network's requirements
@@ -267,7 +287,7 @@ class ModelBase:
         return y_hat
 
     ###
-    ### Learning rate helpers
+    # Learning rate helpers
     ###
     def setup_lr_sched(self):
         """Setup a learning rate training schedule and setup the global step. Override as necessary.
@@ -299,7 +319,7 @@ class ModelBase:
                 self.lr = lr_cyclic_fine(self.g_step_op, lr_base, lr_max, lr_stepsize)
 
     ###
-    ### Debug utils
+    # Debug utils
     ###
     def summary(self):
         model_vars = tf.trainable_variables()
@@ -325,4 +345,3 @@ class ModelBase:
         if self.dbg:
             self.summary()
         print(f"  {'trainable params':22} {np.sum([np.prod(v.shape) for v in tf.trainable_variables()])}")
-

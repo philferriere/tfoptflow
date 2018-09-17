@@ -13,7 +13,9 @@ Based on:
 """
 
 from __future__ import absolute_import, division, print_function
-import time, datetime, warnings
+import time
+import datetime
+import warnings
 import numpy as np
 import pandas as pd
 import tensorflow as tf
@@ -21,7 +23,6 @@ from tqdm import trange
 
 from model_base import ModelBase
 from optflow import flow_write, flow_write_as_png, flow_mag_stats
-from visualize import display_img_pairs_w_flows, archive_img_pairs_w_flows
 from losses import pwcnet_loss
 from logger import OptFlowTBLogger
 from multi_gpus import assign_to_device, average_gradients
@@ -33,142 +34,168 @@ _DEBUG_USE_REF_IMPL = False
 # Default options
 _DEFAULT_PWCNET_TRAIN_OPTIONS = {
     'verbose': False,
-    'ckpt_dir' : './ckpts_trained/', # where training checkpoints are stored
-    'max_to_keep' : 10,
-    'x_dtype' : tf.float32, # image pairs input type
-    'x_shape' : [2, 384, 448, 3], # image pairs input shape [2, H, W, 3]
-    'y_dtype' : tf.float32, # u,v flows output type
-    'y_shape' : [384, 448, 2], # u,v flows output shape [H, W, 2]
-    'train_mode' : 'train', # in ['train', 'fine-tune']
+    'ckpt_dir': './ckpts_trained/',  # where training checkpoints are stored
+    'max_to_keep': 10,
+    'x_dtype': tf.float32,  # image pairs input type
+    'x_shape': [2, 384, 448, 3],  # image pairs input shape [2, H, W, 3]
+    'y_dtype': tf.float32,  # u,v flows output type
+    'y_shape': [384, 448, 2],  # u,v flows output shape [H, W, 2]
+    'train_mode': 'train',  # in ['train', 'fine-tune']
     # Logging/Snapshot params
-    'display_step' : 100, # show progress every 100 training batches
-    'snapshot_step' : 1000, # save trained model every 1000 training batches
-    'val_step' : 1000, # Test trained model on validation split every 1000 training batches
-    'val_batch_size' : -1, # Use -1 to use entire validation split, or set number of val samples (0 disables it)
-    'tb_val_imgs' : 'pyramid', # None or in ['top_flow', 'pyramid'|; runs trained model on batch_size random val images, log results
-    'tb_test_imgs' : None, # None or in ['top_flow', 'pyramid'|; runs trained model on batch_size random test images, log results
+    'display_step': 100,  # show progress every 100 training batches
+    'snapshot_step': 1000,  # save trained model every 1000 training batches
+    'val_step': 1000,  # Test trained model on validation split every 1000 training batches
+    'val_batch_size': -1,  # Use -1 to use entire validation split, or set number of val samples (0 disables it)
+    # None or in ['top_flow', 'pyramid'|; runs trained model on batch_size random val images, log results
+    'tb_val_imgs': 'pyramid',
+    # None or in ['top_flow', 'pyramid'|; runs trained model on batch_size random test images, log results
+    'tb_test_imgs': None,
     # Multi-GPU config
-    'gpu_devices': ['/device:GPU:0', '/device:GPU:1'], # list devices on which to run the model's train ops (can be more than one GPU)
-    'controller': '/device:CPU:0', # controller device to put the model's variables on (usually, /cpu:0 or /gpu:0 -> try both!)
-    'use_tf_data': True, # Set to True to get data from tf.data.Dataset when training/validating; otherwise, use feed_dict with numpy
+    # list devices on which to run the model's train ops (can be more than one GPU)
+    'gpu_devices': ['/device:GPU:0', '/device:GPU:1'],
+    # controller device to put the model's variables on (usually, /cpu:0 or /gpu:0 -> try both!)
+    'controller': '/device:CPU:0',
     # Training config and hyper-params
-    'batch_size' : 8,
-    'lr_policy' : 'multisteps', # choose between None, 'multisteps', and 'cyclic'; adjust the max_steps below too
+    'use_tf_data': True,  # Set to True to get data from tf.data.Dataset; otherwise, use feed_dict with numpy
+    'use_mixed_precision': False,  # Set to True to use mixed precision training (fp16 inputs)
+    'loss_scaler': 8.,  # Loss scaler (only used in mixed precision training)
+    'batch_size': 8,
+    'lr_policy': 'multisteps',  # choose between None, 'multisteps', and 'cyclic'; adjust the max_steps below too
     # Multistep lr schedule
     'init_lr': 1e-04,  # initial learning rate
-    'max_steps': 1200000, # max number of training iterations (i.e., batches to run)
-    'lr_boundaries': [400000, 600000, 800000, 1000000, 1200000], # step schedule boundaries
-    'lr_values': [0.0001, 5e-05, 2.5e-05, 1.25e-05, 6.25e-06, 3.125e-06], # step schedule values
+    'max_steps': 1200000,  # max number of training iterations (i.e., batches to run)
+    'lr_boundaries': [400000, 600000, 800000, 1000000, 1200000],  # step schedule boundaries
+    'lr_values': [0.0001, 5e-05, 2.5e-05, 1.25e-05, 6.25e-06, 3.125e-06],  # step schedule values
     # Cyclic lr schedule
-    'cyclic_lr_max': 0.0004,  # maximum bound
-    'cyclic_lr_base': 0.00001,  # maximum bound
-    'cyclic_lr_stepsize': 10000, # step schedule values
-    # 'max_steps': 100000, # max number of training iterations
+    'cyclic_lr_max': 5e-04,  # max bound, anything higher will generate NaNs on `FlyingChairs+FlyingThings3DHalfRes` mix
+    'cyclic_lr_base': 1e-05,  # min bound
+    'cyclic_lr_stepsize': 20000,  # step schedule values
+    # 'max_steps': 200000, # max number of training iterations
     # Loss functions hyper-params
-    'loss_fn' : 'loss_multiscale', # See 'Implementation details" on page 5 of ref PDF
-    'alphas' : [0.32, 0.08, 0.02, 0.01, 0.005, 0.0025], # See 'Implementation details" on page 5 of ref PDF
-    'gamma' : 0.0004, # See 'Implementation details" on page 5 of ref PDF
-    'q' : 1., # See 'Implementation details" on page 5 of ref PDF
-    'epsilon' : 0., # See 'Implementation details" on page 5 of ref PDF
+    'loss_fn': 'loss_multiscale',  # See 'Implementation details" on page 5 of ref PDF
+    'alphas': [0.32, 0.08, 0.02, 0.01, 0.005, 0.0025],  # See 'Implementation details" on page 5 of ref PDF
+    'gamma': 0.0004,  # See 'Implementation details" on page 5 of ref PDF
+    'q': 1.,  # See 'Implementation details" on page 5 of ref PDF
+    'epsilon': 0.,  # See 'Implementation details" on page 5 of ref PDF
     # Model hyper-params
-    'pyr_lvls' : 6, # number of feature levels in the flow pyramid
-    'flow_pred_lvl': 2, # which level to upsample to generate the final optical flow prediction
-    'search_range' : 4, # cost volume search range
-    'use_dense_cx' : False, # if True, use model with dense connections (4705064 params w/o, 9374274 params with (no residual conn.))
-    'use_res_cx' : False, # if True, use model with residual connections (4705064 params w/o, 6774064 params with (+2069000) (no dense conn.))
-    }
+    'pyr_lvls': 6,  # number of feature levels in the flow pyramid
+    'flow_pred_lvl': 2,  # which level to upsample to generate the final optical flow prediction
+    'search_range': 4,  # cost volume search range
+    # if True, use model with dense connections (4705064 params w/o, 9374274 params with (no residual conn.))
+    'use_dense_cx': False,
+    # if True, use model with residual connections (4705064 params w/o, 6774064 params with (+2069000) (no dense conn.))
+    'use_res_cx': False,
+}
 
 _DEFAULT_PWCNET_FINETUNE_OPTIONS = {
     'verbose': False,
-    'ckpt_path' : './ckpts_trained/pwcnet.ckpt', # original checkpoint to finetune
-    'ckpt_dir' : './ckpts_finetuned/', # where finetuning checkpoints are stored
-    'max_to_keep' : 10,
-    'x_dtype' : tf.float32, # image pairs input type
-    'x_shape' : [2, 384, 768, 3], # image pairs input shape [2, H, W, 3]
-    'y_dtype' : tf.float32, # u,v flows output type
-    'y_shape' : [384, 768, 2], # u,v flows output shape [H, W, 2]
-    'train_mode' : 'fine-tune', # in ['train', 'fine-tune']
+    'ckpt_path': './ckpts_trained/pwcnet.ckpt',  # original checkpoint to finetune
+    'ckpt_dir': './ckpts_finetuned/',  # where finetuning checkpoints are stored
+    'max_to_keep': 10,
+    'x_dtype': tf.float32,  # image pairs input type
+    'x_shape': [2, 384, 768, 3],  # image pairs input shape [2, H, W, 3]
+    'y_dtype': tf.float32,  # u,v flows output type
+    'y_shape': [384, 768, 2],  # u,v flows output shape [H, W, 2]
+    'train_mode': 'fine-tune',  # in ['train', 'fine-tune']
     # Logging/Snapshot params
-    'display_step' : 100, # show progress every 100 training batches
-    'snapshot_step' : 1000, # save trained model every 1000 training batches
-    'val_step' : 1000, # Test trained model on validation split every 1000 training batches
-    'val_batch_size' : -1, # Use -1 to use entire validation split, or set number of val samples (0 disables it)
-    'tb_val_imgs' : 'top_flow', # None, 'top_flow', or 'pyramid'; runs trained model on batch_size val images, log results
-    'tb_test_imgs' : None, # None, 'top_flow', or 'pyramid'; runs trained model on batch_size test images, log results
+    'display_step': 100,  # show progress every 100 training batches
+    'snapshot_step': 1000,  # save trained model every 1000 training batches
+    'val_step': 1000,  # Test trained model on validation split every 1000 training batches
+    'val_batch_size': -1,  # Use -1 to use entire validation split, or set number of val samples (0 disables it)
+    'tb_val_imgs': 'top_flow',  # None, 'top_flow', or 'pyramid'; runs model on batch_size val images, log results
+    'tb_test_imgs': None,  # None, 'top_flow', or 'pyramid'; runs trained model on batch_size test images, log results
     # Multi-GPU config
-    'gpu_devices': ['/device:GPU:0', '/device:GPU:1'], # list devices on which to run the model's train ops (can be more than one GPU)
-    'controller': '/device:CPU:0', # controller device to put the model's variables on (usually, /cpu:0 or /gpu:0 -> try both!)
-    'use_tf_data': True, # Set to True to get data from tf.data.Dataset when training/validating; otherwise, use feed_dict with numpy
+    # list devices on which to run the model's train ops (can be more than one GPU)
+    'gpu_devices': ['/device:GPU:0', '/device:GPU:1'],
+    # controller device to put the model's variables on (usually, /cpu:0 or /gpu:0 -> try both!)
+    'controller': '/device:CPU:0',
     # Training config and hyper-params
-    'batch_size' : 4,
-    'lr_policy' : 'multisteps', # choose between None, 'multisteps', and 'cyclic'; adjust the max_steps below too
+    'use_tf_data': True,  # Set to True to get data from tf.data.Dataset; otherwise, use feed_dict with numpy
+    'use_mixed_precision': False,  # Set to True to use mixed precision training (fp16 inputs)
+    'loss_scaler': 8.,  # Loss scaler (only used in mixed precision training)
+    'batch_size': 4,
+    'lr_policy': 'multisteps',  # choose between None, 'multisteps', and 'cyclic'; adjust the max_steps below too
     # Multistep lr schedule
     'init_lr': 1e-05,  # initial learning rate
-    'max_steps': 500000, # max number of training iterations (i.e., batches to run)
-    'lr_boundaries': [200000, 300000, 400000, 500000], # step schedule boundaries
-    'lr_values': [1e-05, 5e-06, 2.5e-06, 1.25e-06, 6.25e-07], # step schedule values
+    'max_steps': 500000,  # max number of training iterations (i.e., batches to run)
+    'lr_boundaries': [200000, 300000, 400000, 500000],  # step schedule boundaries
+    'lr_values': [1e-05, 5e-06, 2.5e-06, 1.25e-06, 6.25e-07],  # step schedule values
     # Cyclic lr schedule
     'cyclic_lr_max': 2e-05,  # maximum bound
-    'cyclic_lr_base': 1e-06,  # maximum bound
-    'cyclic_lr_stepsize': 10000, # step schedule values
-    # 'max_steps': 100000, # max number of training iterations
+    'cyclic_lr_base': 1e-06,  # min bound
+    'cyclic_lr_stepsize': 20000,  # step schedule values
+    # 'max_steps': 200000, # max number of training iterations
     # Loss functions hyper-params
-    'loss_fn' : 'loss_robust', # See 'Implementation details" on page 5 of ref PDF
-    'alphas' : [0.32, 0.08, 0.02, 0.01, 0.005], # See 'Implementation details" on page 5 of ref PDF
-    'gamma' : 0.0004, # See 'Implementation details" on page 5 of ref PDF
-    'q' : 0.4, # See 'Implementation details" on page 5 of ref PDF
-    'epsilon' : 0.01, # See 'Implementation details" on page 5 of ref PDF
+    'loss_fn': 'loss_robust',  # 'loss_robust' doesn't really work; the loss goes down but the EPE doesn't
+    'alphas': [0.32, 0.08, 0.02, 0.01, 0.005],  # See 'Implementation details" on page 5 of ref PDF
+    'gamma': 0.0004,  # See 'Implementation details" on page 5 of ref PDF
+    'q': 0.4,  # See 'Implementation details" on page 5 of ref PDF
+    'epsilon': 0.01,  # See 'Implementation details" on page 5 of ref PDF
     # Model hyper-params
-    'pyr_lvls' : 6, # number of feature levels in the flow pyramid
-    'flow_pred_lvl': 2, # which level to upsample to generate the final optical flow prediction
-    'search_range' : 4, # cost volume search range
-    'use_dense_cx' : False, # if True, use model with dense connections (4705064 params w/o, 9374274 params with (no residual conn.))
-    'use_res_cx' : False, # if True, use model with residual connections (4705064 params w/o, 6774064 params with (+2069000) (no dense conn.))
-    }
+    'pyr_lvls': 6,  # number of feature levels in the flow pyramid
+    'flow_pred_lvl': 2,  # which level to upsample to generate the final optical flow prediction
+    'search_range': 4,  # cost volume search range
+    # if True, use model with dense connections (4705064 params w/o, 9374274 params with (no residual conn.))
+    'use_dense_cx': False,
+    # if True, use model with residual connections (4705064 params w/o, 6774064 params with (+2069000) (no dense conn.))
+    'use_res_cx': False,
+}
 
 _DEFAULT_PWCNET_VAL_OPTIONS = {
     'verbose': False,
-    'ckpt_path' : './ckpts_trained/pwcnet.ckpt',
-    'x_dtype' : tf.float32, # image pairs input type
-    'x_shape' : [2, None, None, 3], # image pairs input shape [2, H, W, 3]
-    'y_dtype' : tf.float32, # u,v flows output type
-    'y_shape' : [None, None, 2], # u,v flows output shape [H, W, 2]
+    'ckpt_path': './ckpts_trained/pwcnet.ckpt',
+    'x_dtype': tf.float32,  # image pairs input type
+    'x_shape': [2, None, None, 3],  # image pairs input shape [2, H, W, 3]
+    'y_dtype': tf.float32,  # u,v flows output type
+    'y_shape': [None, None, 2],  # u,v flows output shape [H, W, 2]
+    'adapt_info': None,  # if predicted flows are padded by the model, crop them back by to this size
     # Multi-GPU config
-    'gpu_devices': ['/device:GPU:0', '/device:GPU:1'], # list devices on which to run the model's train ops (can be more than one GPU)
-    'controller': '/device:CPU:0', # controller device to put the model's variables on (usually, /cpu:0 or /gpu:0 -> try both!)
-    'use_tf_data': True, # Set to True to get data from tf.data.Dataset when training/validating; otherwise, use feed_dict with numpy
+    # list devices on which to run the model's train ops (can be more than one GPU)
+    'gpu_devices': ['/device:GPU:0', '/device:GPU:1'],
+    # controller device to put the model's variables on (usually, /cpu:0 or /gpu:0 -> try both!)
+    'controller': '/device:CPU:0',
     # Eval config and hyper-params
-    'batch_size' : 1,
+    'batch_size': 1,
+    'use_tf_data': True,  # Set to True to get data from tf.data.Dataset; otherwise, use feed_dict with numpy
+    'use_mixed_precision': False,  # Set to True to use fp16 inputs
     # Model hyper-params
-    'pyr_lvls' : 6, # number of feature levels in the flow pyramid
-    'flow_pred_lvl': 2, # which level to upsample to generate the final optical flow prediction
-    'search_range' : 4, # cost volume search range
-    'use_dense_cx' : False, # if True, use model with dense connections (4705064 params w/o, 9374274 params with (no residual conn.))
-    'use_res_cx' : False, # if True, use model with residual connections (4705064 params w/o, 6774064 params with (+2069000) (no dense conn.))
-    }
+    'pyr_lvls': 6,  # number of feature levels in the flow pyramid
+    'flow_pred_lvl': 2,  # which level to upsample to generate the final optical flow prediction
+    'search_range': 4,  # cost volume search range
+    # if True, use model with dense connections (4705064 params w/o, 9374274 params with (no residual conn.))
+    'use_dense_cx': False,
+    # if True, use model with residual connections (4705064 params w/o, 6774064 params with (+2069000) (no dense conn.))
+    'use_res_cx': False,
+}
 
 _DEFAULT_PWCNET_TEST_OPTIONS = {
     'verbose': False,
-    'ckpt_path' : './ckpts_trained/pwcnet.ckpt',
-    'x_dtype' : tf.float32, # image pairs input type
-    'x_shape' : [2, None, None, 3], # image pairs input shape
-    'y_dtype' : tf.float32, # u,v flows output type
-    'y_shape' : [None, None, 2], # u,v flows output shape
+    'ckpt_path': './ckpts_trained/pwcnet.ckpt',
+    'x_dtype': tf.float32,  # image pairs input type
+    'x_shape': [2, None, None, 3],  # image pairs input shape
+    'y_dtype': tf.float32,  # u,v flows output type
+    'y_shape': [None, None, 2],  # u,v flows output shape
     # Multi-GPU config
-    'gpu_devices': ['/device:GPU:0', '/device:GPU:1'], # list devices on which to run the model's train ops (can be more than one GPU)
-    'controller': '/device:CPU:0', # controller device to put the model's variables on (usually, /cpu:0 or /gpu:0 -> try both!)
-    'use_tf_data': True, # Set to True to get data from tf.data.Dataset when training/validating; otherwise, use feed_dict with numpy
+    # list devices on which to run the model's train ops (can be more than one GPU)
+    'gpu_devices': ['/device:GPU:0', '/device:GPU:1'],
+    # controller device to put the model's variables on (usually, /cpu:0 or /gpu:0 -> try both!)
+    'controller': '/device:CPU:0',
     # Eval config and hyper-params
-    'batch_size' : 1,
+    'batch_size': 1,
+    'use_tf_data': True,  # Set to True to get data from tf.data.Dataset; otherwise, use feed_dict with numpy
+    'use_mixed_precision': False,  # Set to True to use fp16 inputs
     # Model hyper-params
-    'pyr_lvls' : 6, # number of feature levels in the flow pyramid
-    'flow_pred_lvl': 2, # which level to upsample to generate the final optical flow prediction
-    'search_range' : 4, # cost volume search range
-    'use_dense_cx' : False, # if True, use model with dense connections (4705064 params w/o, 9374274 params with (no residual conn.))
-    'use_res_cx' : False, # if True, use model with residual connections (4705064 params w/o, 6774064 params with (+2069000) (no dense conn.))
-    }
+    'pyr_lvls': 6,  # number of feature levels in the flow pyramid
+    'flow_pred_lvl': 2,  # which level to upsample to generate the final optical flow prediction
+    'search_range': 4,  # cost volume search range
+    # if True, use model with dense connections (4705064 params w/o, 9374274 params with (no residual conn.))
+    'use_dense_cx': False,
+    # if True, use model with residual connections (4705064 params w/o, 6774064 params with (+2069000) (no dense conn.))
+    'use_res_cx': False,
+}
 
 # from ref_model import PWCNet
+
 
 class ModelPWCNet(ModelBase):
     def __init__(self, name='pwcnet', mode='train', session=None, options=_DEFAULT_PWCNET_TEST_OPTIONS, dataset=None):
@@ -202,30 +229,42 @@ class ModelPWCNet(ModelBase):
         self.ds = dataset
 
     ###
-    ### Model mgmt
+    # Model mgmt
     ###
     def build_model(self):
         """Build model
         Called by the base class when building the TF graph to setup the list of output tensors
         """
-        if self.opts['verbose']: print("Building model...")
+        if self.opts['verbose']:
+            print("Building model...")
         assert(self.num_gpus <= 1)
 
         # Build the backbone neural nets and collect the output tensors
         with tf.device(self.opts['controller']):
             self.flow_pred_tnsr, self.flow_pyr_tnsr = self.nn(self.x_tnsr)
 
-        if self.opts['verbose']: print("... model built.")
+        if self.opts['verbose']:
+            print("... model built.")
 
     def build_model_towers(self):
         """Build model towers. A tower is the name used to describe a copy of the model on a device.
         Called by the base class when building the TF graph to setup the list of output tensors
         """
-        if self.opts['verbose']: print("Building model towers...")
+        if self.opts['verbose']:
+            print("Building model towers...")
 
-        # Setup a learning rate training schedule and instantiate an optimizer
+        # Setup a learning rate training schedule
         self.setup_lr_sched()
-        self.optim = tf.train.AdamOptimizer(self.lr)
+
+        # Instantiate an optimizer
+        # see https://stackoverflow.com/questions/42064941/tensorflow-float16-support-is-broken
+        # for float32 epsilon=1e-08, for float16 use epsilon=1e-4
+        epsilon = 1e-08 if self.opts['use_mixed_precision'] is False else 1e-4
+        assert (self.opts['train_mode'] in ['train', 'fine-tune'])
+        if self.opts['loss_fn'] == 'loss_multiscale':
+            self.optim = tf.train.AdamOptimizer(self.lr, epsilon=epsilon)
+        else:
+            self.optim = tf.train.ProximalGradientDescentOptimizer(self.lr)
 
         # Keep track of the gradients and losses per tower
         tower_grads, losses, metrics = [], [], []
@@ -238,14 +277,14 @@ class ModelPWCNet(ModelBase):
                 # Use the assign_to_device function to ensure that variables are created on the controller.
                 with tf.device(assign_to_device(ops_device, self.opts['controller'])), tf.name_scope(f'tower_{n}'):
                     # Get a slice of the input batch and groundtruth label
-                    x_tnsr = self.x_tnsr[n*self.opts['batch_size']:(n+1)*self.opts['batch_size'], :]
-                    y_tnsr = self.y_tnsr[n*self.opts['batch_size']:(n+1)*self.opts['batch_size'], :]
+                    x_tnsr = self.x_tnsr[n * self.opts['batch_size']:(n + 1) * self.opts['batch_size'], :]
+                    y_tnsr = self.y_tnsr[n * self.opts['batch_size']:(n + 1) * self.opts['batch_size'], :]
 
                     # Build the model for that slice
                     flow_pred_tnsr, flow_pyr_tnsr = self.nn(x_tnsr)
 
                     # The first tower is also the model we will use to perform online evaluation
-                    if n==0:
+                    if n == 0:
                         self.flow_pred_tnsr, self.flow_pyr_tnsr = flow_pred_tnsr, flow_pyr_tnsr
 
                     # Compute the loss for this tower, with regularization term if requested
@@ -253,7 +292,8 @@ class ModelPWCNet(ModelBase):
                     if self.opts['gamma'] == 0.:
                         loss = loss_unreg
                     else:
-                        loss_reg = self.opts['gamma'] * tf.reduce_sum([tf.nn.l2_loss(var) for var in tf.trainable_variables()])
+                        loss_reg = self.opts['gamma'] * \
+                            tf.reduce_sum([tf.nn.l2_loss(var) for var in tf.trainable_variables()])
                         loss = loss_unreg + loss_reg
 
                     # Evaluate model performance on this tower
@@ -262,8 +302,15 @@ class ModelPWCNet(ModelBase):
                     # Compute the gradients for this tower, but don't apply them yet
                     with tf.name_scope("compute_gradients"):
                         # The function compute_gradients() returns a list of (gradient, variable) pairs
-                        grads = self.optim.compute_gradients(loss)
-                        tower_grads.append(grads)
+                        if self.opts['use_mixed_precision'] is True:
+                            grads, vars = zip(*self.optim.compute_gradients(loss * self.opts['loss_scaler']))
+                            # Return the gradients (now float32) to the correct exponent and keep them in check
+                            grads = [grad / self.opts['loss_scaler'] for grad in grads]
+                            grads, _ = tf.clip_by_global_norm(grads, 5.0)
+                            tower_grads.append(zip(grads, vars))
+                        else:
+                            grad_and_vars = self.optim.compute_gradients(loss)
+                            tower_grads.append(grad_and_vars)
 
                     losses.append(loss)
 
@@ -283,7 +330,8 @@ class ModelPWCNet(ModelBase):
             self.loss_op = tf.reduce_mean(losses)
             self.metric_op = tf.reduce_mean(metrics)
 
-        if self.opts['verbose']: print("... model towers built.")
+        if self.opts['verbose']:
+            print("... model towers built.")
 
     def set_output_tnsrs(self):
         """Initialize output tensors
@@ -303,41 +351,44 @@ class ModelPWCNet(ModelBase):
         self.y_hat_test_tnsr = [self.flow_pred_tnsr, self.flow_pyr_tnsr]
 
     ###
-    ### Sample mgmt
+    # Sample mgmt
     ###
     def adapt_x(self, x):
         """Preprocess the input samples to adapt them to the network's requirements
         Here, x, is the actual data, not the x TF tensor.
         Args:
-            x: input samples in list[(2,H,W,3)] or (batch_size,2,H,W,3) np array form
+            x: input samples in list[(2,H,W,3)] or (N,2,H,W,3) np array form
         Returns:
-            Samples ready to be given to the network (w. same shape as x) and adaptation information
+            Samples ready to be given to the network (w. same shape as x)
+            Also, return adaptation info in (N,2,H,W,3) format
         """
         # Ensure we're dealing with RGB image pairs
-        assert (type(x) is np.ndarray or type(x) is list)
-        if type(x) is np.ndarray:
+        assert (isinstance(x, np.ndarray) or isinstance(x, list))
+        if isinstance(x, np.ndarray):
             assert (len(x.shape) == 5)
             assert (x.shape[1] == 2 and x.shape[4] == 3)
         else:
             assert (len(x[0].shape) == 4)
             assert (x[0].shape[0] == 2 or x[0].shape[3] == 3)
 
-        # Bring image range from 0..255 to 0..1 and use floats
-        if type(x) is list:
-            x_adapt = np.array(x, dtype=np.float32) # list[(2,H,W,3)] -> (batch_size,2,H,W,3)
+        # Bring image range from 0..255 to 0..1 and use floats (also, list[(2,H,W,3)] -> (batch_size,2,H,W,3))
+        if self.opts['use_mixed_precision'] is True:
+            x_adapt = np.array(x, dtype=np.float16) if isinstance(x, list) else x.astype(np.float16)
         else:
-            x_adapt = x.astype(np.float32)
+            x_adapt = np.array(x, dtype=np.float32) if isinstance(x, list) else x.astype(np.float32)
         x_adapt /= 255.
 
         # Make sure the image dimensions are multiples of 2**pyramid_levels, pad them if they're not
         _, pad_h = divmod(x_adapt.shape[2], 2**self.opts['pyr_lvls'])
-        if pad_h != 0: pad_h = 2 ** self.opts['pyr_lvls'] - pad_h
+        if pad_h != 0:
+            pad_h = 2 ** self.opts['pyr_lvls'] - pad_h
         _, pad_w = divmod(x_adapt.shape[3], 2**self.opts['pyr_lvls'])
-        if pad_w != 0: pad_w = 2 ** self.opts['pyr_lvls'] - pad_w
+        if pad_w != 0:
+            pad_w = 2 ** self.opts['pyr_lvls'] - pad_w
         x_adapt_info = None
         if pad_h != 0 or pad_w != 0:
             padding = [(0, 0), (0, 0), (0, pad_h), (0, pad_w), (0, 0)]
-            x_adapt_info = x_adapt.shape # Save original shape
+            x_adapt_info = x_adapt.shape  # Save original shape
             x_adapt = np.pad(x_adapt, padding, mode='constant', constant_values=0.)
 
         return x_adapt, x_adapt_info
@@ -346,30 +397,33 @@ class ModelPWCNet(ModelBase):
         """Preprocess the labels to adapt them to the loss computation requirements of the network
         Here, y, is the actual data, not the y TF tensor.
         Args:
-            y: labels in list[(H,W,2)] or (batch_size,H,W,2) np array form
+            y: labels in list[(H,W,2)] or (N,H,W,2) np array form
         Returns:
             Labels ready to be used by the network's loss function (w. same shape as y)
+            Also, return adaptation info in (N,H,W,2) format
         """
         # Ensure we're dealing with u,v flows
-        assert (type(y) is np.ndarray or type(y) is list)
-        if type(y) is np.ndarray:
+        assert (isinstance(y, np.ndarray) or isinstance(y, list))
+        if isinstance(y, np.ndarray):
             assert (len(y.shape) == 4)
             assert (y.shape[3] == 2)
         else:
             assert (len(y[0].shape) == 3)
             assert (y[0].shape[2] == 2)
 
-        y_adapt = np.array(y, dtype=np.float32) if type(y) is list else y # list[(H,W,2)] -> (batch_size,H,W,2)
+        y_adapt = np.array(y, dtype=np.float32) if isinstance(y, list) else y  # list[(H,W,2)] -> (batch_size,H,W,2)
 
         # Make sure the flow dimensions are multiples of 2**pyramid_levels, pad them if they're not
         _, pad_h = divmod(y.shape[1], 2**self.opts['pyr_lvls'])
-        if pad_h != 0: pad_h = 2 ** self.opts['pyr_lvls'] - pad_h
+        if pad_h != 0:
+            pad_h = 2 ** self.opts['pyr_lvls'] - pad_h
         _, pad_w = divmod(y.shape[2], 2**self.opts['pyr_lvls'])
-        if pad_w != 0: pad_w = 2 ** self.opts['pyr_lvls'] - pad_w
+        if pad_w != 0:
+            pad_w = 2 ** self.opts['pyr_lvls'] - pad_w
         y_adapt_info = None
         if pad_h != 0 or pad_w != 0:
             padding = [(0, 0), (0, pad_h), (0, pad_w), (0, 0)]
-            y_adapt_info = y_adapt.shape # Save original shape
+            y_adapt_info = y_adapt.shape  # Save original shape
             y_adapt = np.pad(y_adapt, padding, mode='constant', constant_values=0.)
 
         return y_adapt, y_adapt_info
@@ -379,23 +433,23 @@ class ModelPWCNet(ModelBase):
         Here, y_hat, is the actual data, not the y_hat TF tensor. Override as necessary.
         Args:
             y_hat: predictions, see set_output_tnsrs() for details
-            adapt_info: adaptation information
+            adapt_info: adaptation information in (N,H,W,2) format
         Returns:
             Postprocessed labels
         """
-        assert (type(y_hat) is list and len(y_hat) == 2)
+        assert (isinstance(y_hat, list) and len(y_hat) == 2)
 
         # Have the samples been padded to fit the network's requirements? If so, crop flows back to original size.
-        pred_flows=y_hat[0]
+        pred_flows = y_hat[0]
         if adapt_info is not None:
             pred_flows = pred_flows[:, 0:adapt_info[1], 0:adapt_info[2], :]
 
         # Individuate levels of the pyramids (at this point, they are still batched)
-        pyramids=y_hat[1]
+        pyramids = y_hat[1]
         pred_flow_pyramids = []
         for idx in range(len(pred_flows)):
             pyramid = []
-            for lvl in range(self.opts['pyr_lvls']-self.opts['flow_pred_lvl']+1):
+            for lvl in range(self.opts['pyr_lvls'] - self.opts['flow_pred_lvl'] + 1):
                 pyramid.append(pyramids[lvl][idx])
             pred_flow_pyramids.append(pyramid)
 
@@ -406,11 +460,11 @@ class ModelPWCNet(ModelBase):
         Here, y_hat, is the actual data, not the y_hat TF tensor. Override as necessary.
         Args:
             y_hat: losses and metrics, see set_output_tnsrs() for details
-            adapt_info: adaptation information
+            adapt_info: adaptation information in (N,H,W,2) format
         Returns:
             Batch loss and metric
         """
-        assert (type(y_hat) is list and len(y_hat) == 3)
+        assert (isinstance(y_hat, list) and len(y_hat) == 3)
 
         return y_hat[0], y_hat[1]
 
@@ -419,25 +473,25 @@ class ModelPWCNet(ModelBase):
         Here, y_hat, is the actual data, not the y_hat TF tensor. Override as necessary.
         Args:
             y_hat: batch loss and metric, or predicted flows and metrics, see set_output_tnsrs() for details
-            adapt_info: adaptation information
+            adapt_info: adaptation information in (N,H,W,2) format
         Returns:
             Either, batch loss and metric
             Or, predicted flows and metrics
         """
         if self.mode in ['train_noval', 'train_with_val']:
             # In online evaluation mode, we only care about the average loss and metric for the batch:
-            assert (type(y_hat) is list and len(y_hat) == 2)
+            assert (isinstance(y_hat, list) and len(y_hat) == 2)
             return y_hat[0], y_hat[1]
 
         if self.mode in ['val', 'val_notrain']:
             # Have the samples been padded to fit the network's requirements? If so, crop flows back to original size.
             pred_flows = y_hat[0]
             if adapt_info is not None:
-                pred_flows = pred_flows[:,0:adapt_info[1],0:adapt_info[2],:]
+                pred_flows = pred_flows[:, 0:adapt_info[1], 0:adapt_info[2], :]
             return pred_flows, y_hat[1]
 
     ###
-    ### Training  helpers
+    # Training  helpers
     ###
     def setup_loss_ops(self):
         """Setup loss computations. See pwcnet_loss() function for unregularized loss implementation details.
@@ -456,10 +510,26 @@ class ModelPWCNet(ModelBase):
         """Select the Adam optimizer, define the optimization process.
         """
         # Instantiate optimizer
-        self.optim = tf.train.AdamOptimizer(self.lr)
+        # see https://stackoverflow.com/questions/42064941/tensorflow-float16-support-is-broken
+        # for float32 epsilon=1e-08, for float16 use epsilon=1e-4
+        epsilon = 1e-08 if self.opts['use_mixed_precision'] is False else 1e-4
+        if self.opts['loss_fn'] == 'loss_multiscale':
+            self.optim = tf.train.AdamOptimizer(self.lr, epsilon=epsilon)
+        else:
+            self.optim = tf.train.ProximalGradientDescentOptimizer(self.lr)
 
-        # Let minimize() take care of both computing the gradients and applying them to the model variables
-        self.optim_op = self.optim.minimize(self.loss_op, self.g_step_op, tf.trainable_variables())
+        if self.opts['use_mixed_precision'] is True:
+            # Breakdown backward pass steps so we can scale the gradients appropriately
+            # Raise the exponent during the backward pass in float16
+            grads, vars = zip(*self.optim.compute_gradients(self.loss_op * self.opts['loss_scaler']))
+            # Return the gradients (now float32) to the correct exponent and keep them in check
+            grads = [grad / self.opts['loss_scaler'] for grad in grads]
+            grads, _ = tf.clip_by_global_norm(grads, 5.0)
+            # Apply the gradients as usual
+            self.optim_op = self.optim.apply_gradients(zip(grads, vars), self.g_step_op)
+        else:
+            # Let minimize() take care of both computing the gradients and applying them to the model variables
+            self.optim_op = self.optim.minimize(self.loss_op, self.g_step_op, tf.trainable_variables())
 
     def config_train_ops(self):
         """Configure training ops.
@@ -471,7 +541,8 @@ class ModelPWCNet(ModelBase):
             - creating lists of output tensors.
         """
         assert (self.opts['train_mode'] in ['train', 'fine-tune'])
-        if self.opts['verbose']: print("Configuring training ops...")
+        if self.opts['verbose']:
+            print("Configuring training ops...")
 
         # Setup loss computations
         self.setup_loss_ops()
@@ -485,7 +556,8 @@ class ModelPWCNet(ModelBase):
         # Setup optimizer computations
         self.setup_optim_op()
 
-        if self.opts['verbose']: print("... training ops configured.")
+        if self.opts['verbose']:
+            print("... training ops configured.")
 
     def config_loggers(self):
         """Configure train logger and, optionally, val logger. Here add a logger for test images, if requested.
@@ -501,14 +573,17 @@ class ModelPWCNet(ModelBase):
         if self.opts['train_mode'] == 'fine-tune':
             step = 1
             self.sess.run(self.g_step_op.assign(0))
-            if self.opts['verbose']: print("Start finetuning...")
+            if self.opts['verbose']:
+                print("Start finetuning...")
         else:
             if self.last_ckpt is not None:
                 step = self.g_step_op.eval(session=self.sess) + 1
-                if self.opts['verbose']: print(f"Resume training from step {step}...")
+                if self.opts['verbose']:
+                    print(f"Resume training from step {step}...")
             else:
                 step = 1
-                if self.opts['verbose']: print("Start training from scratch...")
+                if self.opts['verbose']:
+                    print("Start training from scratch...")
 
         # Get batch sizes
         batch_size = self.opts['batch_size']
@@ -517,7 +592,7 @@ class ModelPWCNet(ModelBase):
             warnings.warn("Setting val_batch_size=0 because dataset is in 'train_noval' mode")
             val_batch_size = 0
         if val_batch_size == -1:
-                val_batch_size = self.ds.val_size
+            val_batch_size = self.ds.val_size
 
         # Init batch progress trackers
         train_loss, train_epe, duration = [], [], []
@@ -556,7 +631,7 @@ class ModelPWCNet(ModelBase):
             start_time = time.time()
             y_hat = self.sess.run(self.y_hat_train_tnsr, feed_dict=feed_dict)
             duration.append(time.time() - start_time)
-            loss, epe = self.postproc_y_hat_train(y_hat) # y_hat: [107.0802, 5.8556495, None]
+            loss, epe = self.postproc_y_hat_train(y_hat)  # y_hat: [107.0802, 5.8556495, None]
             # if self.num_gpus == 1: # Single-GPU case
             # else: # Multi-CPU case
 
@@ -573,7 +648,7 @@ class ModelPWCNet(ModelBase):
                 self.tb_train.log_scalar("optim/lr", lr, step)
 
                 # Print results, if requested
-                if self.opts['verbose'] == True:
+                if self.opts['verbose']:
                     sec_per_step = np.mean(duration)
                     samples_per_step = batch_size * self.num_gpus
                     samples_per_sec = samples_per_step / sec_per_step
@@ -617,7 +692,7 @@ class ModelPWCNet(ModelBase):
                 self.tb_val.log_scalar("metrics/epe", epe, step)
 
                 # Print results, if requested
-                if self.opts['verbose'] == True:
+                if self.opts['verbose']:
                     ts = time.strftime("%Y-%m-%d %H:%M:%S")
                     status = f"{ts} Iter {self.g_step_op.eval(session=self.sess)} [Val]: loss={loss:.2f}, epe={epe:.2f}"
                     print(status)
@@ -629,7 +704,8 @@ class ModelPWCNet(ModelBase):
                 if self.opts['tb_test_imgs'] is not None:
                     # Get a batch of test samples and make them conform to the network's requirements
                     if tb_test_loaded is False:
-                        x_tb_test, IDs_tb_test = self.ds.get_samples(batch_size * self.num_gpus, split='test', simple_IDs=True)
+                        x_tb_test, IDs_tb_test = self.ds.get_samples(
+                            batch_size * self.num_gpus, split='test', simple_IDs=True)
                         x_tb_test_adapt, _ = self.adapt_x(x_tb_test)
                         # IDs_tb_test = self.ds.simplify_IDs(x_IDs)
                         tb_test_loaded = True
@@ -648,13 +724,15 @@ class ModelPWCNet(ModelBase):
                                                       None, step, IDs_tb_test)
                     else:
                         self.tb_test.log_imgs_w_flows('test/{}_flow_pyrs', x_tb_test, pred_flow_pyrs,
-                                                      self.opts['pyr_lvls']-self.opts['flow_pred_lvl'], pred_flows, None, step, IDs_tb_test)
+                                                      self.opts['pyr_lvls'] - self.opts['flow_pred_lvl'], pred_flows,
+                                                      None, step, IDs_tb_test)
 
                 # Log evolution of val images, if requested
                 if self.opts['tb_val_imgs'] is not None:
                     # Get a batch of val samples and make them conform to the network's requirements
                     if tb_val_loaded is False:
-                        x_tb_val, y_tb_val, IDs_tb_val = self.ds.get_samples(batch_size * self.num_gpus, split='val', simple_IDs=True)
+                        x_tb_val, y_tb_val, IDs_tb_val = self.ds.get_samples(
+                            batch_size * self.num_gpus, split='val', simple_IDs=True)
                         x_tb_val_adapt, _ = self.adapt_x(x_tb_val)
                         # IDs_tb_val = self.ds.simplify_IDs(x_IDs)
                         tb_val_loaded = True
@@ -665,7 +743,7 @@ class ModelPWCNet(ModelBase):
                     pred_flows, pred_flow_pyrs = self.postproc_y_hat_test(y_hat)
 
                     # Only show batch_size results, no matter what the GPU count is
-                    x_tb_val, y_tb_val= x_tb_val[0:batch_size], y_tb_val[0:batch_size]
+                    x_tb_val, y_tb_val = x_tb_val[0:batch_size], y_tb_val[0:batch_size]
                     IDs_tb_val = IDs_tb_val[0:batch_size]
                     pred_flows, pred_flow_pyrs = pred_flows[0:batch_size], pred_flow_pyrs[0:batch_size]
 
@@ -675,28 +753,39 @@ class ModelPWCNet(ModelBase):
                                                      y_tb_val, step, IDs_tb_val)
                     else:
                         self.tb_val.log_imgs_w_flows('val/{}_flow_pyrs', x_tb_val[0:batch_size], pred_flow_pyrs,
-                                                     self.opts['pyr_lvls']-self.opts['flow_pred_lvl'], pred_flows, y_tb_val, step, IDs_tb_val)
+                                                     self.opts['pyr_lvls'] - self.opts['flow_pred_lvl'], pred_flows,
+                                                     y_tb_val, step, IDs_tb_val)
 
                 # Save model
                 self.save_ckpt(ranking_value)
 
             step += 1
 
-        if self.opts['verbose']: print("... done training.")
+        if self.opts['verbose']:
+            print("... done training.")
 
     ###
-    ### Evaluation helpers
+    # Evaluation helpers
     ###
     def setup_metrics_ops(self):
         """Setup metrics computations. Use the endpoint error metric to track progress.
+        Note that, if the label flows come back from the network padded, it isn't a fair assessment of the performance
+        of the model if we also measure the EPE in the padded area. This area is to be cropped out before returning
+        the predicted flows to the caller, so exclude that area when computing the performance metric.
         """
+        # Have the samples been padded to the nn's requirements? If so, crop flows back to original size.
+        y_tnsr, flow_pred_tnsr = self.y_tnsr, self.flow_pred_tnsr
+        if self.opts['adapt_info'] is not None:
+            y_tnsr = y_tnsr[:, 0:self.opts['adapt_info'][1], 0:self.opts['adapt_info'][2], :]
+            flow_pred_tnsr = flow_pred_tnsr[:, 0:self.opts['adapt_info'][1], 0:self.opts['adapt_info'][2], :]
+
         if self.mode in ['train_noval', 'train_with_val']:
             # In online evaluation mode, we only care about the average loss and metric for the batch:
-            self.metric_op = tf.reduce_mean(tf.norm(self.y_tnsr - self.flow_pred_tnsr, ord=2, axis=3))
+            self.metric_op = tf.reduce_mean(tf.norm(y_tnsr - flow_pred_tnsr, ord=2, axis=3))
 
         if self.mode in ['val', 'val_notrain']:
-            # In offline evaluation mode, we actually care about each individual prediction and metric:
-            self.metric_op = tf.reduce_mean(tf.norm(self.y_tnsr - self.flow_pred_tnsr, ord=2, axis=3), axis=(1,2))
+            # In offline evaluation mode, we actually care about each individual prediction and metric -> axis=(1, 2)
+            self.metric_op = tf.reduce_mean(tf.norm(y_tnsr - flow_pred_tnsr, ord=2, axis=3), axis=(1, 2))
 
     def eval(self, metric_name=None, save_preds=False):
         """Evaluation loop. Test the trained model on the validation split of the dataset.
@@ -755,7 +844,8 @@ class ModelPWCNet(ModelBase):
                 df.loc[idx] = (ID, metric, duration, flow_mag_avg, flow_mag_max)
                 if save_preds:
                     flow_write(y_hat, y_hat_path)
-                    flow_write_as_png(y_hat, y_hat_path.replace('.flo', '.png'), corner_text=f"{metric_name}={metric:.2f}")
+                    info=f"{metric_name}={metric:.2f}"
+                    flow_write_as_png(y_hat, y_hat_path.replace('.flo', '.png'), info=info)
                 idx += 1
 
         # Compute stats
@@ -764,7 +854,7 @@ class ModelPWCNet(ModelBase):
         return avg_metric, avg_duration, df
 
     ###
-    ### PWC-Net pyramid helpers
+    # PWC-Net pyramid helpers
     ###
     def extract_features(self, x_tnsr, name='featpyr'):
         """Extract pyramid of features
@@ -834,29 +924,31 @@ class ModelPWCNet(ModelBase):
         Ref Caffee code:
             https://github.com/NVlabs/PWC-Net/blob/438ca897ae77e08f419ddce5f0d7fa63b0a27a77/Caffe/model/train.prototxt#L314-L1141
         """
-        assert(1<= self.opts['pyr_lvls'] <= 6)
-        if self.dbg: print(f"Building feature pyramids (c11,c21) ... (c1{self.opts['pyr_lvls']},c2{self.opts['pyr_lvls']})")
+        assert(1 <= self.opts['pyr_lvls'] <= 6)
+        if self.dbg:
+            print(f"Building feature pyramids (c11,c21) ... (c1{self.opts['pyr_lvls']},c2{self.opts['pyr_lvls']})")
         # Make the feature pyramids 1-based for better readability down the line
         num_chann = [None, 16, 32, 64, 96, 128, 196]
         c1, c2 = [None], [None]
         init = tf.keras.initializers.he_normal()
         with tf.variable_scope(name):
-            for pyr, x, reuse, name in zip([c1, c2], [x_tnsr[:,0], x_tnsr[:,1]], [None, True], ['c1', 'c2']):
-                for lvl in range(1, self.opts['pyr_lvls']+1):
+            for pyr, x, reuse, name in zip([c1, c2], [x_tnsr[:, 0], x_tnsr[:, 1]], [None, True], ['c1', 'c2']):
+                for lvl in range(1, self.opts['pyr_lvls'] + 1):
                     # tf.layers.conv2d(inputs, filters, kernel_size, strides=(1, 1), padding='valid', ... , name, reuse)
                     # reuse is set to True because we want to learn a single set of weights for the pyramid
                     # kernel_initializer = 'he_normal' or tf.keras.initializers.he_normal(seed=None)
-                    x = tf.layers.conv2d(x, num_chann[lvl], 3, 2, 'same', kernel_initializer = init, name=f'conv{lvl}a', reuse=reuse)
-                    x = tf.nn.leaky_relu(x, alpha=0.1) # , name=f'relu{lvl+1}a') # default alpha is 0.2 for TF
-                    x = tf.layers.conv2d(x, num_chann[lvl], 3, 1, 'same', kernel_initializer = init, name=f'conv{lvl}aa', reuse=reuse)
-                    x = tf.nn.leaky_relu(x, alpha=0.1) # , name=f'relu{lvl+1}aa')
-                    x = tf.layers.conv2d(x, num_chann[lvl], 3, 1, 'same', kernel_initializer = init, name=f'conv{lvl}b', reuse=reuse)
+                    f = num_chann[lvl]
+                    x = tf.layers.conv2d(x, f, 3, 2, 'same', kernel_initializer=init, name=f'conv{lvl}a', reuse=reuse)
+                    x = tf.nn.leaky_relu(x, alpha=0.1)  # , name=f'relu{lvl+1}a') # default alpha is 0.2 for TF
+                    x = tf.layers.conv2d(x, f, 3, 1, 'same', kernel_initializer=init, name=f'conv{lvl}aa', reuse=reuse)
+                    x = tf.nn.leaky_relu(x, alpha=0.1)  # , name=f'relu{lvl+1}aa')
+                    x = tf.layers.conv2d(x, f, 3, 1, 'same', kernel_initializer=init, name=f'conv{lvl}b', reuse=reuse)
                     x = tf.nn.leaky_relu(x, alpha=0.1, name=f'{name}{lvl}')
                     pyr.append(x)
         return c1, c2
 
     ###
-    ### PWC-Net warping helpers
+    # PWC-Net warping helpers
     ###
     def warp(self, c2, sc_up_flow, lvl, name='warp'):
         """Warp a level of Image1's feature pyramid using the upsampled flow at level+1 of Image2's pyramid.
@@ -969,13 +1061,14 @@ class ModelPWCNet(ModelBase):
             up_feat3 = self.upfeat3(x)
         """
         op_name = f'{name}{lvl}'
-        if self.dbg: print(f'Adding {op_name} with input {x.op.name}')
+        if self.dbg:
+            print(f'Adding {op_name} with input {x.op.name}')
         with tf.variable_scope('upsample'):
             # tf.layers.conv2d_transpose(inputs, filters, kernel_size, strides=(1, 1), padding='valid', ... , name)
             return tf.layers.conv2d_transpose(x, 2, 4, 2, 'same', name=op_name)
 
     ###
-    ### Cost Volume helpers
+    # Cost Volume helpers
     ###
     def corr(self, c1, warp, lvl, name='corr'):
         """Build cost volume for associating a pixel from Image1 with its corresponding pixels in Image2.
@@ -1025,12 +1118,13 @@ class ModelPWCNet(ModelBase):
         corr2 = self.leakyRELU(corr2)
         """
         op_name = f'corr{lvl}'
-        if self.dbg: print(f'Adding {op_name} with inputs {c1.op.name} and {warp.op.name}')
+        if self.dbg:
+            print(f'Adding {op_name} with inputs {c1.op.name} and {warp.op.name}')
         with tf.name_scope(name):
             return cost_volume(c1, warp, self.opts['search_range'], op_name)
 
     ###
-    ### Optical flow estimator helpers
+    # Optical flow estimator helpers
     ###
     def predict_flow(self, corr, c1, up_flow, up_feat, lvl, name='predict_flow'):
         """Estimate optical flow.
@@ -1166,8 +1260,9 @@ class ModelPWCNet(ModelBase):
         op_name = f'flow{lvl}'
         init = tf.keras.initializers.he_normal()
         with tf.variable_scope(name):
-            if c1 == up_flow == up_feat == None:
-                if self.dbg: print(f'Adding {op_name} with input {corr.op.name}')
+            if c1 is None and up_flow is None and up_feat is None:
+                if self.dbg:
+                    print(f'Adding {op_name} with input {corr.op.name}')
                 x = corr
             else:
                 if self.dbg:
@@ -1176,7 +1271,7 @@ class ModelPWCNet(ModelBase):
                 x = tf.concat([corr, c1, up_flow, up_feat], axis=3)
 
             conv = tf.layers.conv2d(x, 128, 3, 1, 'same', kernel_initializer=init, name=f'conv{lvl}_0')
-            act = tf.nn.leaky_relu(conv, alpha=0.1) # default alpha is 0.2 for TF
+            act = tf.nn.leaky_relu(conv, alpha=0.1)  # default alpha is 0.2 for TF
             x = tf.concat([act, x], axis=3) if self.opts['use_dense_cx'] else act
 
             conv = tf.layers.conv2d(x, 128, 3, 1, 'same', kernel_initializer=init, name=f'conv{lvl}_1')
@@ -1192,7 +1287,7 @@ class ModelPWCNet(ModelBase):
             x = tf.concat([act, x], axis=3) if self.opts['use_dense_cx'] else act
 
             conv = tf.layers.conv2d(x, 32, 3, 1, 'same', kernel_initializer=init, name=f'conv{lvl}_4')
-            act = tf.nn.leaky_relu(conv, alpha=0.1) # will also be used as an input by the context network
+            act = tf.nn.leaky_relu(conv, alpha=0.1)  # will also be used as an input by the context network
             upfeat = tf.concat([act, x], axis=3, name=f'upfeat{lvl}') if self.opts['use_dense_cx'] else act
 
             flow = tf.layers.conv2d(upfeat, 2, 3, 1, 'same', name=op_name)
@@ -1200,7 +1295,7 @@ class ModelPWCNet(ModelBase):
             return upfeat, flow
 
     ###
-    ### PWC-Net context network helpers
+    # PWC-Net context network helpers
     ###
     def refine_flow(self, feat, flow, lvl, name='ctxt'):
         """Post-ptrocess the estimated optical flow using a "context" nn.
@@ -1251,27 +1346,28 @@ class ModelPWCNet(ModelBase):
             flow2 += self.dc_conv7(self.dc_conv6(self.dc_conv5(x)))
         """
         op_name = f'refined_flow{lvl}'
-        if self.dbg: print(f'Adding {op_name} sum of dc_convs_chain({feat.op.name}) with {flow.op.name}')
+        if self.dbg:
+            print(f'Adding {op_name} sum of dc_convs_chain({feat.op.name}) with {flow.op.name}')
         init = tf.keras.initializers.he_normal()
         with tf.variable_scope(name):
             x = tf.layers.conv2d(feat, 128, 3, 1, 'same', dilation_rate=1, kernel_initializer=init, name=f'dc_conv{lvl}1')
-            x = tf.nn.leaky_relu(x, alpha=0.1) # default alpha is 0.2 for TF
+            x = tf.nn.leaky_relu(x, alpha=0.1)  # default alpha is 0.2 for TF
             x = tf.layers.conv2d(x, 128, 3, 1, 'same', dilation_rate=2, kernel_initializer=init, name=f'dc_conv{lvl}2')
             x = tf.nn.leaky_relu(x, alpha=0.1)
             x = tf.layers.conv2d(x, 128, 3, 1, 'same', dilation_rate=4, kernel_initializer=init, name=f'dc_conv{lvl}3')
             x = tf.nn.leaky_relu(x, alpha=0.1)
-            x = tf.layers.conv2d(x,  96, 3, 1, 'same', dilation_rate=8, kernel_initializer=init, name=f'dc_conv{lvl}4')
+            x = tf.layers.conv2d(x, 96, 3, 1, 'same', dilation_rate=8, kernel_initializer=init, name=f'dc_conv{lvl}4')
             x = tf.nn.leaky_relu(x, alpha=0.1)
-            x = tf.layers.conv2d(x,  64, 3, 1, 'same', dilation_rate=16, kernel_initializer=init, name=f'dc_conv{lvl}5')
+            x = tf.layers.conv2d(x, 64, 3, 1, 'same', dilation_rate=16, kernel_initializer=init, name=f'dc_conv{lvl}5')
             x = tf.nn.leaky_relu(x, alpha=0.1)
-            x = tf.layers.conv2d(x,  32, 3, 1, 'same', dilation_rate=1, kernel_initializer=init, name=f'dc_conv{lvl}6')
+            x = tf.layers.conv2d(x, 32, 3, 1, 'same', dilation_rate=1, kernel_initializer=init, name=f'dc_conv{lvl}6')
             x = tf.nn.leaky_relu(x, alpha=0.1)
-            x = tf.layers.conv2d(x,   2, 3, 1, 'same', dilation_rate=1, kernel_initializer=init, name=f'dc_conv{lvl}7')
+            x = tf.layers.conv2d(x, 2, 3, 1, 'same', dilation_rate=1, kernel_initializer=init, name=f'dc_conv{lvl}7')
 
             return tf.add(flow, x, name=op_name)
 
     ###
-    ### PWC-Net nn builder
+    # PWC-Net nn builder
     ###
     def nn(self, x_tnsr, name='pwcnet'):
         """Defines and connects the backbone neural nets
@@ -1304,7 +1400,7 @@ class ModelPWCNet(ModelBase):
                     upfeat, flow = self.predict_flow(corr, None, None, None, lvl)
                 else:
                     # Warp level of Image1's using the upsampled flow
-                    scaler = 20. / 2**lvl # scaler values are 0.625, 1.25, 2.5, 5.0
+                    scaler = 20. / 2**lvl  # scaler values are 0.625, 1.25, 2.5, 5.0
                     warp = self.warp(c2[lvl], up_flow * scaler, lvl)
 
                     # Compute the cost volume
@@ -1331,7 +1427,8 @@ class ModelPWCNet(ModelBase):
 
                     # Upsample the predicted flow (final output) to match the size of the images
                     scaler = 2**self.opts['flow_pred_lvl']
-                    if self.dbg: print(f'Upsampling {flow.op.name} by {scaler} in each dimension.')
+                    if self.dbg:
+                        print(f'Upsampling {flow.op.name} by {scaler} in each dimension.')
                     size = (lvl_height * scaler, lvl_width * scaler)
                     flow_pred = tf.image.resize_bilinear(flow, size, name="flow_pred") * scaler
                     break

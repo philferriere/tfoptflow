@@ -46,7 +46,8 @@ Refs:
 """
 
 from __future__ import absolute_import, division, print_function
-import os, warnings
+import os
+import warnings
 import numpy as np
 import cv2
 from skimage.io import imsave
@@ -55,7 +56,7 @@ from utils import clean_dst_file
 
 
 ##
-## I/O utils
+# I/O utils
 ##
 
 TAG_FLOAT = 202021.25
@@ -96,7 +97,7 @@ def flow_read(src_file):
             h = np.fromfile(f, np.int32, count=1)[0]
 
             # Read in flow data and reshape it
-            flow = np.fromfile(f, np.float32, count=h*w*2)
+            flow = np.fromfile(f, np.float32, count=h * w * 2)
             flow.resize((h, w, 2))
 
     elif src_file.lower().endswith('.png'):
@@ -129,12 +130,13 @@ def flow_read(src_file):
 
             # Read in flow data and reshape it
             flow = np.fromfile(f, '<f') if scale < 0 else np.fromfile(f, '>f')
-            flow = np.reshape(flow, (h, w, 3))[:,:,0:2]
+            flow = np.reshape(flow, (h, w, 3))[:, :, 0:2]
             flow = np.flipud(flow)
     else:
         raise IOError
 
     return flow
+
 
 def flow_write(flow, dst_file):
     """Write optical flow to a .flo file
@@ -155,8 +157,9 @@ def flow_write(flow, dst_file):
         flow.astype(np.float32).tofile(f)
 
 ##
-## Visualization utils
+# Visualization utils
 ##
+
 
 def flow_mag_stats(flow):
     """Get the average flow magnitude from a flow field.
@@ -179,14 +182,15 @@ def flow_mag_stats(flow):
 
     return np.min(flow_magnitude), np.mean(flow_magnitude), np.max(flow_magnitude)
 
-def flow_to_img(flow, normalize=True, corner_text=None, flow_mag_max=None):
+
+def flow_to_img(flow, normalize=True, info=None, flow_mag_max=None):
     """Convert flow to viewable image, using color hue to encode flow vector orientation, and color saturation to
     encode vector length. This is similar to the OpenCV tutorial on dense optical flow, except that they map vector
     length to the value plane of the HSV color model, instead of the saturation plane, as we do here.
     Args:
         flow: optical flow
         normalize: Normalize flow to 0..255
-        corner_text: Text to superimpose on image (typically, the epe for the predicted flow)
+        info: Text to superimpose on image (typically, the epe for the predicted flow)
         flow_mag_max: Max flow to map to 255
     Returns:
         img: viewable representation of the dense optical flow in RGB format
@@ -196,7 +200,7 @@ def flow_to_img(flow, normalize=True, corner_text=None, flow_mag_max=None):
         https://docs.opencv.org/3.0-beta/doc/py_tutorials/py_video/py_lucas_kanade/py_lucas_kanade.html
     """
     hsv = np.zeros((flow.shape[0], flow.shape[1], 3), dtype=np.uint8)
-    flow_magnitude, flow_angle = cv2.cartToPolar(flow[..., 0], flow[..., 1])
+    flow_magnitude, flow_angle = cv2.cartToPolar(flow[..., 0].astype(np.float32), flow[..., 1].astype(np.float32))
 
     # A couple times, we've gotten NaNs out of the above...
     nans = np.isnan(flow_magnitude)
@@ -217,18 +221,19 @@ def flow_to_img(flow, normalize=True, corner_text=None, flow_mag_max=None):
     img = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
 
     # Add text to the image, if requested
-    if corner_text is not None:
+    if info is not None:
         font = cv2.FONT_HERSHEY_SIMPLEX
-        cv2.putText(img, corner_text, (20, 20), font, 0.8, (0, 0, 0), 2, cv2.LINE_AA)
+        cv2.putText(img, info, (20, 20), font, 0.8, (0, 0, 0), 2, cv2.LINE_AA)
 
     return img
 
-def flow_write_as_png(flow, dst_file, corner_text=None, flow_mag_max=None):
+
+def flow_write_as_png(flow, dst_file, info=None, flow_mag_max=None):
     """Write optical flow to a .PNG file
     Args:
         flow: optical flow
         dst_file: Path where to write optical flow as a .PNG file
-        corner_text: Text to superimpose on image (typically, the epe for the predicted flow)
+        info: Text to superimpose on image (typically, the epe for the predicted flow)
         flow_mag_max: Max flow to map to 255
     """
     # Convert the optical flow field to RGB
@@ -239,13 +244,11 @@ def flow_write_as_png(flow, dst_file, corner_text=None, flow_mag_max=None):
     clean_dst_file(dst_file)
 
     # Add text to the image, if requested
-    if corner_text is not None:
+    if info is not None:
         font = cv2.FONT_HERSHEY_SIMPLEX
-        cv2.putText(img, corner_text, (20, 20), font, 0.8, (0, 0, 0), 2, cv2.LINE_AA)
+        cv2.putText(img, info, (20, 20), font, 0.8, (0, 0, 0), 2, cv2.LINE_AA)
 
     # Save RGB version of optical flow to disk
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         imsave(dst_file, img)
-
-

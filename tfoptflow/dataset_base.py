@@ -10,7 +10,8 @@ Licensed under the MIT License (see LICENSE for details)
 
 from __future__ import absolute_import, division, print_function
 
-import os, sys
+import os
+import sys
 import tensorflow as tf
 import numpy as np
 from tqdm import tqdm
@@ -18,82 +19,86 @@ from skimage.io import imread
 import cv2
 
 from augment import Augmenter
-from optflow import flow_read, flow_write
+from optflow import flow_read
 
 if sys.platform.startswith("win"):
     _DATASET_ROOT = 'E:/datasets/'
 else:
     _DATASET_ROOT = '/media/EDrive/datasets/'
 
-_DBG_TRAIN_VAL_TEST_SETS = -1 # 128 # -1
+_DBG_TRAIN_VAL_TEST_SETS = -1  # 128 # -1
 
 _DEFAULT_DS_TRAIN_OPTIONS = {
     'verbose': False,
-    'in_memory': False, # True loads all samples upfront, False loads them on-demand
-    'crop_preproc': (384, 448), # None or (h, w), use (384, 768) for FlyingThings3D
-    'scale_preproc': None, # None or (h, w),
+    'in_memory': False,  # True loads all samples upfront, False loads them on-demand
+    'crop_preproc': (384, 448),  # None or (h, w), use (384, 768) for FlyingThings3D
+    'scale_preproc': None,  # None or (h, w),
     'input_channels': 3,  # [1 | 3] input images number of color channels (greyscale or RGB images)
     # 'type': 'final',  # ['clean' | 'final'] for MPISintel, ['noc' | 'occ'] for KITTI, 'into_future' for FlyingThings3D
-    'tb_test_imgs' : False, # If True, make test images available to model in training mode
+    'tb_test_imgs': False,  # If True, make test images available to model in training mode
     # Sampling and split options
-    'random_seed' : 1969, # random seed used for sampling
-    'val_split' : 0.03, # portion of data reserved for the validation split
+    'random_seed': 1969,  # random seed used for sampling
+    'val_split': 0.03,  # portion of data reserved for the validation split
     # Augmentation options
-    'aug_type': 'heavy', # in [None, 'basic', 'heavy'] to add augmented data to training set
-    'aug_labels': True, # If True, augment both images and labels; otherwise, only augment images
-    'fliplr' : 0.5, # Horizontally flip 50% of images
-    'flipud' : 0.5, # Vertically flip 50% of images
-    'translate' : (0.5, 0.05), # Translate 50% of images by a value between -5 and +5 percent of original size on x- and y-axis independently
-    'scale' : (0.5, 0.05), # Scale 50% of images by a factor between 95 and 105 percent of original size
+    'aug_type': 'heavy',  # in [None, 'basic', 'heavy'] to add augmented data to training set
+    'aug_labels': True,  # If True, augment both images and labels; otherwise, only augment images
+    'fliplr': 0.5,  # Horizontally flip 50% of images
+    'flipud': 0.5,  # Vertically flip 50% of images
+    # Translate 50% of images by a value between -5 and +5 percent of original size on x- and y-axis independently
+    'translate': (0.5, 0.05),
+    'scale': (0.5, 0.05),  # Scale 50% of images by a factor between 95 and 105 percent of original size
 }
 
 _DEFAULT_DS_TUNE_OPTIONS = {
     'verbose': False,
-    'in_memory': False, # True loads all samples upfront, False loads them on-demand
-    'crop_preproc': (384, 768), # None or (h, w), use (384, 768) for FlyingThings3D
-    'scale_preproc': None, # None or (h, w),
+    'in_memory': False,  # True loads all samples upfront, False loads them on-demand
+    'crop_preproc': (384, 768),  # None or (h, w), use (384, 768) for FlyingThings3D
+    'scale_preproc': None,  # None or (h, w),
     'input_channels': 3,  # [1 | 3] input images number of color channels (greyscale or RGB images)
-    'type': 'into_future',  # ['clean' | 'final'] for MPISintel, ['noc' | 'occ'] for KITTI, 'into_future' for FlyingThings3D
-    'tb_test_imgs' : False, # If True, make test images available to model in training mode
+    # ['clean' | 'final'] for MPISintel, ['noc' | 'occ'] for KITTI, 'into_future' for FlyingThings3D
+    'type': 'into_future',
+    'tb_test_imgs': False,  # If True, make test images available to model in training mode
     # Sampling and split options
-    'random_seed' : 1969, # random seed used for sampling
-    'val_split' : 0.03, # portion of data reserved for the validation split
+    'random_seed': 1969,  # random seed used for sampling
+    'val_split': 0.03,  # portion of data reserved for the validation split
     # Augmentation options
-    'aug_type': 'heavy', # in [None, 'basic', 'heavy'] to add augmented data to training set
-    'aug_labels': True, # If True, augment both images and labels; otherwise, only augment images
-    'fliplr' : 0.5, # Horizontally flip 50% of images
-    'flipud' : 0.5, # Vertically flip 50% of images
-    'translate' : (0.5, 0.05), # Translate 50% of images by a value between -5 and +5 percent of original size on x- and y-axis independently
-    'scale' : (0.5, 0.05), # Scale 50% of images by a factor between 95 and 105 percent of original size
+    'aug_type': 'heavy',  # in [None, 'basic', 'heavy'] to add augmented data to training set
+    'aug_labels': True,  # If True, augment both images and labels; otherwise, only augment images
+    'fliplr': 0.5,  # Horizontally flip 50% of images
+    'flipud': 0.5,  # Vertically flip 50% of images
+    # Translate 50% of images by a value between -5 and +5 percent of original size on x- and y-axis independently
+    'translate': (0.5, 0.05),
+    'scale': (0.5, 0.05),  # Scale 50% of images by a factor between 95 and 105 percent of original size
 }
 
 _DEFAULT_DS_VAL_OPTIONS = {
     'verbose': False,
-    'in_memory': False, # True loads all samples upfront, False loads them on-demand
-    'crop_preproc': None, # None or (h, w),
-    'scale_preproc': None, # None or (h, w),
+    'in_memory': False,  # True loads all samples upfront, False loads them on-demand
+    'crop_preproc': None,  # None or (h, w),
+    'scale_preproc': None,  # None or (h, w),
     'input_channels': 3,  # [1 | 3] input images number of color channels (greyscale or RGB images)
     'type': 'final',  # ['clean' | 'final'] for MPISintel, ['noc' | 'occ'] for KITTI, 'into_future' for FlyingThings3D
     # Sampling and split options
-    'random_seed' : 1969, # random seed used for sampling
-    'val_split' : 0.03, # portion of data reserved for the validation split
+    'random_seed': 1969,  # random seed used for sampling
+    'val_split': 0.03,  # portion of data reserved for the validation split
     # Augmentation options
     'aug_type': None,  # in [None, 'basic', 'heavy'] to add augmented data to training set
 }
 
 _DEFAULT_DS_TEST_OPTIONS = {
     'verbose': False,
-    'in_memory': False, # True loads all samples upfront, False loads them on-demand
-    'crop_preproc': None, # None or (h, w),
-    'scale_preproc': None, # None or (h, w),
+    'in_memory': False,  # True loads all samples upfront, False loads them on-demand
+    'crop_preproc': None,  # None or (h, w),
+    'scale_preproc': None,  # None or (h, w),
     'input_channels': 3,  # [1 | 3] input images number of color channels (greyscale or RGB images)
     'type': 'final',  # ['clean' | 'final'] for MPISintel, ['noc' | 'occ'] for KITTI, 'into_future' for FlyingThings3D
     # Sampling and split options
-    'random_seed' : 1969, # random seed used for sampling
-    'val_split' : 0.03, # portion of data reserved for the validation split
+    'random_seed': 1969,  # random seed used for sampling
+    'val_split': 0.03,  # portion of data reserved for the validation split
     # Augmentation options
     'aug_type': None,  # in [None, 'basic', 'heavy'] to add augmented data to training set
 }
+
 
 class OpticalFlowDataset(object):
     """Optical flow dataset.
@@ -125,11 +130,11 @@ class OpticalFlowDataset(object):
         # Set the names of the train/val/test files that will hold the list of sample/label IDs
         self.set_IDs_filenames()
 
-        self._train_IDs = self._val_IDs = self._test_IDs = None
-        self._train_IDs_simplified = self._val_IDs_simplified = self._test_IDs_simplified = None
+        self._trn_IDs = self._val_IDs = self._tst_IDs = None
+        self._trn_IDs_simpl = self._val_IDs_simpl = self._tst_IDs_simpl = None
         self._images_train = self._labels_train = self._images_val = self._labels_val = self._images_test = None
-        self._images_train_path = self._labels_train_path = self._images_val_path = self._labels_val_path = None
-        self._pred_labels_val_path = self._pred_labels_test_path = self._images_test_path = None
+        self._img_trn_path = self._lbl_trn_path = self._img_val_path = self._lbl_val_path = None
+        self._pred_lbl_val_path = self._pred_lbl_tst_path = self._img_tst_path = None
 
         # Load ID files
         if not self._load_ID_files():
@@ -137,21 +142,21 @@ class OpticalFlowDataset(object):
 
         # Collect flow stats - the below data members MUST be set in any class that
         # derives from this base class BEFORE calling this constructor!
-        if self.min_flow_mag == self.avg_flow_mag == self.max_flow_mag == None:
+        if self.min_flow is None and self.avg_flow is None and self.max_flow is None:
             self._get_flow_stats()
 
         # Load all data in memory, if requested
         if self.opts['in_memory']:
-             self._preload_all_samples()
+            self._preload_all_samples()
 
         # Shuffle the data and set trackers
         np.random.seed(self.opts['random_seed'])
         if self.mode in ['train_noval', 'train_with_val']:
             # Train over the original training set, in the first case
-            self._train_ptr = 0
-            self.train_size = len(self._train_IDs)
-            self._train_idx = np.arange(self.train_size)
-            np.random.shuffle(self._train_idx)
+            self._trn_ptr = 0
+            self.trn_size = len(self._trn_IDs)
+            self._trn_idx = np.arange(self.trn_size)
+            np.random.shuffle(self._trn_idx)
             if self.mode == 'train_with_val':
                 # Train over the training split, validate over the validation split, in the second case
                 self._val_ptr = 0
@@ -160,17 +165,12 @@ class OpticalFlowDataset(object):
                 np.random.shuffle(self._val_idx)
             if self.opts['tb_test_imgs'] is True:
                 # Make test images available to model in training mode
-                self._test_ptr = 0
-                self.test_size = len(self._test_IDs)
-                self._test_idx = np.arange(self.test_size)
+                self._tst_ptr = 0
+                self.tst_size = len(self._tst_IDs)
+                self._tst_idx = np.arange(self.tst_size)
             # Instantiate augmenter, if requested
             if self.opts['aug_type'] is not None:
                 assert (self.opts['aug_type'] in ['basic', 'heavy'])
-                # aug_opts = {}
-                # for opt in ['aug_type', 'aug_labels', 'fliplr', 'flipud', 'rotate', 'translate', 'scale', 'random_seed']:
-                #     aug_opts[opt] = self.opts[opt]
-                # aug_opts['aug_labels'] = True
-                # self._aug = Augmenter(aug_opts)
                 self._aug = Augmenter(self.opts)
 
         elif self.mode in ['val', 'val_notrain']:
@@ -182,53 +182,42 @@ class OpticalFlowDataset(object):
 
         else:
             # Test over the entire testing set
-            self._test_ptr = 0
-            self.test_size = len(self._test_IDs)
-            self._test_idx = np.arange(self.test_size)
-
-    @property
-    def val_split(self):
-        return self.opts['val_split']
-
-    @property
-    def root(self):
-        return self._ds_root
-
-    @property
-    def pred_label_folder(self):
-        return self._pred_label_folder
-
+            self._tst_ptr = 0
+            self.tst_size = len(self._tst_IDs)
+            self._tst_idx = np.arange(self.tst_size)
 
     ###
-    ### training/val/test ID files
+    # training/val/test ID files
     ###
     def set_folders(self):
         """Set the train, val, test, label and prediction label folders.
         Override this for each dataset, if necessary.
         Called by the base class on init.
         """
-        self._test_folder = self._val_folder = self._train_folder = self._ds_root
-        self._label_folder = f"{self._ds_root}/flow"
-        self._pred_label_folder = f"{self._ds_root}/flow_pred"
+        self._tst_dir = self._val_dir = self._trn_dir = self._ds_root
+        self._lbl_dir = f"{self._ds_root}/flow"
+        self._pred_lbl_dir = f"{self._ds_root}/flow_pred"
 
     def set_IDs_filenames(self):
         """Set the names of the train/val/test files that will hold the list of sample/label IDs
         Override this for each dataset, if necessary.
         Called by the base class on init.
         """
-        self._train_IDs_file = f"{self._ds_root}/train_{self.opts['val_split']}split.txt"
+        self._trn_IDs_file = f"{self._ds_root}/train_{self.opts['val_split']}split.txt"
         self._val_IDs_file = f"{self._ds_root}/val_{self.opts['val_split']}split.txt"
-        self._test_IDs_file = f"{self._ds_root}/test.txt"
+        self._tst_IDs_file = f"{self._ds_root}/test.txt"
 
     def prepare(self):
         """Do all the preprocessing needed before training/val/test samples can be used.
         """
-        if self.opts['verbose']: print("Preparing dataset (one-time operation)...")
+        if self.opts['verbose']:
+            print("Preparing dataset (one-time operation)...")
         # Create paths files and load them back in
         self._build_ID_sets()
         self._create_ID_files()
         self._load_ID_files()
-        if self.opts['verbose']: print("... done with preparing the dataset.")
+        if self.opts['verbose']:
+            print("... done with preparing the dataset.")
 
     def _build_ID_sets(self):
         """Build the list of samples and their IDs, split them in the proper datasets.
@@ -244,8 +233,9 @@ class OpticalFlowDataset(object):
         """
         flow_mags = []
         desc = "Collecting training flow stats"
-        with tqdm(total=len(self._labels_train_path), desc=desc, ascii=True, ncols=100) as pbar:
-            for flow_path in self._labels_train_path:
+        num_flows = len(self._lbl_trn_path)
+        with tqdm(total=num_flows, desc=desc, ascii=True, ncols=100) as pbar:
+            for flow_path in self._lbl_trn_path:
                 pbar.update(1)
                 flow = flow_read(flow_path)
                 flow_magnitude, _ = cv2.cartToPolar(flow[..., 0], flow[..., 1])
@@ -254,13 +244,16 @@ class OpticalFlowDataset(object):
                     nans = np.where(nans)
                     flow_magnitude[nans] = 0.
                 flow_mags.append(flow_magnitude)
-        self.min_flow_mag, self.avg_flow_mag, self.max_flow_mag = np.min(flow_mags), np.mean(flow_mags), np.max(flow_mags)
-        print(f"training flow mag min={self.min_flow_mag}, avg={self.avg_flow_mag}, max={self.max_flow_mag} ({len(self._labels_train_path)} flows)")
+        self.min_flow, self.max_flow = np.min(flow_mags), np.max(flow_mags)
+        self.avg_flow = np.mean(flow_mags)
+        print(
+            f"train flow min={self.min_flow}, avg={self.avg_flow}, max={self.max_flow} ({num_flows} flows)")
 
     def _create_ID_files(self):
         """Create the ID files for each split of the dataset
         """
-        for file, IDs in [(self._train_IDs_file, self._train_IDs), (self._val_IDs_file, self._val_IDs), (self._test_IDs_file, self._test_IDs)]:
+        for file, IDs in [(self._trn_IDs_file, self._trn_IDs), (self._val_IDs_file,
+                                                                self._val_IDs), (self._tst_IDs_file, self._tst_IDs)]:
             with open(file, 'w') as f:
                 f.write('\n'.join('{}###{}###{}'.format(ID[0], ID[1], ID[2]) for ID in IDs))
 
@@ -270,42 +263,48 @@ class OpticalFlowDataset(object):
               True if ID files were loaded, False if ID files weren't found
         """
         if self.mode in ['train_noval', 'train_with_val']:
-            if not os.path.exists(self._train_IDs_file) or not os.path.exists(self._val_IDs_file):
+            if not os.path.exists(self._trn_IDs_file) or not os.path.exists(self._val_IDs_file):
                 return False
 
-            with open(self._train_IDs_file, 'r') as f:
-                self._train_IDs = f.readlines()
-                self._train_IDs = [tuple(ID.rstrip().split("###")) for ID in self._train_IDs]
+            with open(self._trn_IDs_file, 'r') as f:
+                self._trn_IDs = f.readlines()
+                self._trn_IDs = [tuple(ID.rstrip().split("###")) for ID in self._trn_IDs]
 
             with open(self._val_IDs_file, 'r') as f:
                 self._val_IDs = f.readlines()
                 self._val_IDs = [tuple(ID.rstrip().split("###")) for ID in self._val_IDs]
 
-            self._images_train_path = [(self._train_folder + '/' + ID[0], self._train_folder + '/' + ID[1]) for ID in self._train_IDs]
-            self._labels_train_path = [self._train_label_folder + '/' + ID[2] for ID in self._train_IDs]
+            self._img_trn_path = [(self._trn_dir + '/' + ID[0], self._trn_dir + '/' + ID[1]) for ID in self._trn_IDs]
+            self._lbl_trn_path = [self._trn_lbl_dir + '/' + ID[2] for ID in self._trn_IDs]
 
             if self.mode == 'train_noval':
                 # Train over the original training set (no validation split)
-                self._train_IDs += self._val_IDs
-                self._images_train_path += [(self._val_folder + '/' + ID[0], self._val_folder + '/' + ID[1]) for ID in self._val_IDs]
-                self._labels_train_path += [self._val_label_folder + '/' + ID[2] for ID in self._val_IDs]
+                self._trn_IDs += self._val_IDs
+                for ID in self._val_IDs:
+                    self._img_trn_path.append((self._val_dir + '/' + ID[0], self._val_dir + '/' + ID[1]))
+                    self._lbl_trn_path.append(self._val_lbl_dir + '/' + ID[2])
             else:
                 # Train over the training split, validate over the validation split
-                self._images_val_path = [(self._val_folder + '/' + ID[0], self._val_folder + '/' + ID[1]) for ID in self._val_IDs]
-                self._labels_val_path = [self._val_label_folder + '/' + ID[2] for ID in self._val_IDs]
-                self._pred_labels_val_path = [self._val_pred_label_folder + '/' + ID[2].replace('.pfm', '.flo').replace('.png', '.flo') for ID in self._val_IDs]
+                self._img_val_path, self._lbl_val_path, self._pred_lbl_val_path = [], [], []
+                for ID in self._val_IDs:
+                    self._img_val_path.append((self._val_dir + '/' + ID[0], self._val_dir + '/' + ID[1]))
+                    self._lbl_val_path.append(self._val_lbl_dir + '/' + ID[2])
+                    lbl_id = ID[2].replace('.pfm', '.flo').replace('.png', '.flo')
+                    self._pred_lbl_val_path.append(self._val_pred_lbl_dir + '/' + lbl_id)
 
             if self.opts['tb_test_imgs'] is True:
                 # Make test images available to model in training mode
-                if not os.path.exists(self._test_IDs_file):
+                if not os.path.exists(self._tst_IDs_file):
                     return False
 
-                with open(self._test_IDs_file, 'r') as f:
-                    self._test_IDs = f.readlines()
-                    self._test_IDs = [tuple(ID.rstrip().split("###")) for ID in self._test_IDs]
+                with open(self._tst_IDs_file, 'r') as f:
+                    self._tst_IDs = f.readlines()
+                    self._tst_IDs = [tuple(ID.rstrip().split("###")) for ID in self._tst_IDs]
 
-                self._images_test_path = [(self._test_folder + '/' + ID[0], self._test_folder + '/' + ID[1]) for ID in self._test_IDs]
-                self._pred_labels_test_path = [self._test_pred_label_folder + '/' + ID[2] for ID in self._test_IDs]
+                self._img_tst_path, self._pred_lbl_tst_path = [], []
+                for ID in self._tst_IDs:
+                    self._img_tst_path.append((self._tst_dir + '/' + ID[0], self._tst_dir + '/' + ID[1]))
+                    self._pred_lbl_tst_path.append(self._tst_pred_lbl_dir + '/' + ID[2])
 
         elif self.mode in ['val', 'val_notrain']:
             # Validate over the validation split
@@ -317,49 +316,66 @@ class OpticalFlowDataset(object):
                 self._val_IDs = [tuple(ID.rstrip().split("###")) for ID in self._val_IDs]
 
             if self.mode == 'val_notrain':
-                with open(self._train_IDs_file, 'r') as f:
-                    self._train_IDs = f.readlines()
-                    self._train_IDs = [tuple(ID.rstrip().split("###")) for ID in self._train_IDs]
-                self._val_IDs += self._train_IDs
+                with open(self._trn_IDs_file, 'r') as f:
+                    self._trn_IDs = f.readlines()
+                    self._trn_IDs = [tuple(ID.rstrip().split("###")) for ID in self._trn_IDs]
+                self._val_IDs += self._trn_IDs
 
-            self._images_val_path = [(self._val_folder + '/' + ID[0], self._val_folder + '/' + ID[1]) for ID in self._val_IDs]
-            self._labels_val_path = [self._val_label_folder + '/' + ID[2] for ID in self._val_IDs]
-            self._pred_labels_val_path = [self._val_pred_label_folder + '/' + ID[2].replace('.pfm', '.flo').replace('.png', '.flo') for ID in self._val_IDs]
+            self._img_val_path, self._lbl_val_path, self._pred_lbl_val_path = [], [], []
+            for ID in self._val_IDs:
+                self._img_val_path.append((self._val_dir + '/' + ID[0], self._val_dir + '/' + ID[1]))
+                self._lbl_val_path.append(self._val_lbl_dir + '/' + ID[2])
+                lbl_id = ID[2].replace('.pfm', '.flo').replace('.png', '.flo')
+                self._pred_lbl_val_path.append(self._val_pred_lbl_dir + '/' + lbl_id)
 
         else:
             # Test over the entire testing set
-            if not os.path.exists(self._test_IDs_file):
+            if not os.path.exists(self._tst_IDs_file):
                 return False
 
-            with open(self._test_IDs_file, 'r') as f:
-                self._test_IDs = f.readlines()
-                self._test_IDs = [tuple(ID.rstrip().split("###")) for ID in self._test_IDs]
+            with open(self._tst_IDs_file, 'r') as f:
+                self._tst_IDs = f.readlines()
+                self._tst_IDs = [tuple(ID.rstrip().split("###")) for ID in self._tst_IDs]
 
-            self._images_test_path = [(self._test_folder + '/' + ID[0], self._test_folder + '/' + ID[1]) for ID in self._test_IDs]
-            self._pred_labels_test_path = [self._test_pred_label_folder + '/' + ID[2] for ID in self._test_IDs]
+            self._img_tst_path, self._pred_lbl_tst_path = [], []
+            for ID in self._tst_IDs:
+                self._img_tst_path.append((self._tst_dir + '/' + ID[0], self._tst_dir + '/' + ID[1]))
+                self._pred_lbl_tst_path.append(self._tst_pred_lbl_dir + '/' + ID[2])
 
         # Build a list of simplified IDs for Tensorboard logging
-        if self._train_IDs is not None: self._train_IDs_simplified = self.simplify_IDs(self._train_IDs)
-        if self._val_IDs is not None: self._val_IDs_simplified = self.simplify_IDs(self._val_IDs)
-        if self._test_IDs is not None: self._test_IDs_simplified = self.simplify_IDs(self._test_IDs)
+        if self._trn_IDs is not None:
+            self._trn_IDs_simpl = self.simplify_IDs(self._trn_IDs)
+        if self._val_IDs is not None:
+            self._val_IDs_simpl = self.simplify_IDs(self._val_IDs)
+        if self._tst_IDs is not None:
+            self._tst_IDs_simpl = self.simplify_IDs(self._tst_IDs)
 
         if _DBG_TRAIN_VAL_TEST_SETS != -1:  # Debug mode only
-            if self._train_IDs is not None: self._train_IDs = self._train_IDs[0:_DBG_TRAIN_VAL_TEST_SETS]
-            if self._images_train_path is not None: self._images_train_path = self._images_train_path[0:_DBG_TRAIN_VAL_TEST_SETS]
-            if self._labels_train_path is not None: self._labels_train_path = self._labels_train_path[0:_DBG_TRAIN_VAL_TEST_SETS]
-            if self._val_IDs is not None: self._val_IDs = self._val_IDs[0:_DBG_TRAIN_VAL_TEST_SETS]
-            if self._images_val_path is not None: self._images_val_path = self._images_val_path[0:_DBG_TRAIN_VAL_TEST_SETS]
-            if self._labels_val_path is not None: self._labels_val_path = self._labels_val_path[0:_DBG_TRAIN_VAL_TEST_SETS]
-            if self._pred_labels_val_path is not None: self._pred_labels_val_path = self._pred_labels_val_path[0:_DBG_TRAIN_VAL_TEST_SETS]
-            if self._test_IDs is not None: self._test_IDs = self._test_IDs[0:_DBG_TRAIN_VAL_TEST_SETS]
-            if self._images_test_path is not None: self._images_test_path = self._images_test_path[0:_DBG_TRAIN_VAL_TEST_SETS]
-            if self._pred_labels_test_path is not None: self._pred_labels_test_path = self._pred_labels_test_path[0:_DBG_TRAIN_VAL_TEST_SETS]
+            if self._trn_IDs is not None:
+                self._trn_IDs = self._trn_IDs[0:_DBG_TRAIN_VAL_TEST_SETS]
+            if self._img_trn_path is not None:
+                self._img_trn_path = self._img_trn_path[0:_DBG_TRAIN_VAL_TEST_SETS]
+            if self._lbl_trn_path is not None:
+                self._lbl_trn_path = self._lbl_trn_path[0:_DBG_TRAIN_VAL_TEST_SETS]
+            if self._val_IDs is not None:
+                self._val_IDs = self._val_IDs[0:_DBG_TRAIN_VAL_TEST_SETS]
+            if self._img_val_path is not None:
+                self._img_val_path = self._img_val_path[0:_DBG_TRAIN_VAL_TEST_SETS]
+            if self._lbl_val_path is not None:
+                self._lbl_val_path = self._lbl_val_path[0:_DBG_TRAIN_VAL_TEST_SETS]
+            if self._pred_lbl_val_path is not None:
+                self._pred_lbl_val_path = self._pred_lbl_val_path[0:_DBG_TRAIN_VAL_TEST_SETS]
+            if self._tst_IDs is not None:
+                self._tst_IDs = self._tst_IDs[0:_DBG_TRAIN_VAL_TEST_SETS]
+            if self._img_tst_path is not None:
+                self._img_tst_path = self._img_tst_path[0:_DBG_TRAIN_VAL_TEST_SETS]
+            if self._pred_lbl_tst_path is not None:
+                self._pred_lbl_tst_path = self._pred_lbl_tst_path[0:_DBG_TRAIN_VAL_TEST_SETS]
 
         return True
 
-
     ###
-    ### Batch Management
+    # Batch Management
     ###
     def _preload_all_samples(self):
         """Preload all samples (input image pairs + associated flows) in memory.
@@ -367,46 +383,51 @@ class OpticalFlowDataset(object):
         if self.mode in ['train_noval', 'train_with_val']:
 
             self._images_train, self._labels_train = [], []
-            with tqdm(total=len(self._images_train_path), desc="Loading train image pairs & flows", ascii=True, ncols=100) as pbar:
-                for n, image_path in enumerate(self._images_train_path):
+            desc = "Loading train image pairs & flows"
+            with tqdm(total=len(self._img_trn_path), desc=desc, ascii=True, ncols=100) as pbar:
+                for n, image_path in enumerate(self._img_trn_path):
                     pbar.update(1)
-                    label_path = self._labels_train_path[n]
+                    label_path = self._lbl_trn_path[n]
                     image, label = self._load_sample(image_path, label_path)
                     self._labels_train.append(label)
                     self._images_train.append(image)
 
             if self.mode == 'train_with_val':
                 self._images_val, self._labels_val = [], []
-                with tqdm(total=len(self._images_val_path), desc="Loading val image pairs & flows", ascii=True, ncols=100) as pbar:
-                    for n, image_path in enumerate(self._images_val_path):
+                desc = "Loading val image pairs & flows"
+                with tqdm(total=len(self._img_val_path), desc=desc, ascii=True, ncols=100) as pbar:
+                    for n, image_path in enumerate(self._img_val_path):
                         pbar.update(1)
-                        label_path = self._labels_val_path[n]
+                        label_path = self._lbl_val_path[n]
                         image, label = self._load_sample(image_path, label_path, preprocess=False)
                         self._labels_val.append(label)
                         self._images_val.append(image)
 
             if self.opts['tb_test_imgs'] is True:
                 self._images_test = []
-                with tqdm(total=len(self._images_test_path), desc="Loading test samples", ascii=True, ncols=100) as pbar:
-                    for image_path in self._images_test_path:
+                desc = "Loading test samples"
+                with tqdm(total=len(self._img_tst_path), desc=desc, ascii=True, ncols=100) as pbar:
+                    for image_path in self._img_tst_path:
                         pbar.update(1)
                         self._images_test.append(self._load_sample(image_path, preprocess=False))
 
         elif self.mode in ['val', 'val_notrain']:
 
             self._images_val, self._labels_val = [], []
-            with tqdm(total=len(self._images_val_path), desc="Loading val image pairs & flows", ascii=True, ncols=100) as pbar:
-                for n, image_path in enumerate(self._images_val_path):
+            desc = "Loading val image pairs & flows"
+            with tqdm(total=len(self._img_val_path), desc=desc, ascii=True, ncols=100) as pbar:
+                for n, image_path in enumerate(self._img_val_path):
                     pbar.update(1)
-                    label_path = self._labels_val_path[n]
+                    label_path = self._lbl_val_path[n]
                     image, label = self._load_sample(image_path, label_path, preprocess=False)
                     self._labels_val.append(label)
                     self._images_val.append(image)
 
         elif self.mode == 'test':
             self._images_test = []
-            with tqdm(total=len(self._images_test_path), desc="Loading test samples", ascii=True, ncols=100) as pbar:
-                for image_path in self._images_test_path:
+            desc = "Loading test samples"
+            with tqdm(total=len(self._img_tst_path), desc=desc, ascii=True, ncols=100) as pbar:
+                for image_path in self._img_tst_path:
                     pbar.update(1)
                     self._images_test.append(self._load_sample(image_path, preprocess=False))
 
@@ -428,14 +449,14 @@ class OpticalFlowDataset(object):
         # Come up with list of indices to load
         if split == 'train':
             assert(self.mode in ['train_noval', 'train_with_val'])
-            if self._train_ptr + batch_size < self.train_size:
-                idx = np.array(self._train_idx[self._train_ptr:self._train_ptr + batch_size])
-                new_ptr = self._train_ptr + batch_size
+            if self._trn_ptr + batch_size < self.trn_size:
+                idx = np.array(self._trn_idx[self._trn_ptr:self._trn_ptr + batch_size])
+                new_ptr = self._trn_ptr + batch_size
             else:
-                old_idx = np.array(self._train_idx[self._train_ptr:])
-                np.random.shuffle(self._train_idx)
-                new_ptr = (self._train_ptr + batch_size) % self.train_size
-                idx = np.concatenate((old_idx, np.array(self._train_idx[:new_ptr])))
+                old_idx = np.array(self._trn_idx[self._trn_ptr:])
+                np.random.shuffle(self._trn_idx)
+                new_ptr = (self._trn_ptr + batch_size) % self.trn_size
+                idx = np.concatenate((old_idx, np.array(self._trn_idx[:new_ptr])))
 
         elif split in ['val', 'val_with_preds', 'val_with_pred_paths']:
             assert(self.mode in ['val', 'val_notrain', 'train_with_val'])
@@ -450,26 +471,26 @@ class OpticalFlowDataset(object):
 
         elif split in ['test', 'test_with_pred_paths']:
             assert (self.mode == 'test')
-            if self._test_ptr + batch_size < self.test_size:
-                new_ptr = self._test_ptr + batch_size
-                idx = list(range(self._test_ptr, self._test_ptr + batch_size))
+            if self._tst_ptr + batch_size < self.tst_size:
+                new_ptr = self._tst_ptr + batch_size
+                idx = list(range(self._tst_ptr, self._tst_ptr + batch_size))
             else:
-                new_ptr = (self._test_ptr + batch_size) % self.test_size
-                idx = list(range(self._test_ptr, self.test_size)) + list(range(0, new_ptr))
+                new_ptr = (self._tst_ptr + batch_size) % self.tst_size
+                idx = list(range(self._tst_ptr, self.tst_size)) + list(range(0, new_ptr))
 
         # Move pointers forward
         if split == 'train':
-            self._train_ptr = new_ptr
+            self._trn_ptr = new_ptr
         elif split in ['val', 'val_with_preds', 'val_with_pred_paths']:
             self._val_ptr = new_ptr
         elif split in ['test', 'test_with_pred_paths']:
-            self._test_ptr = new_ptr
+            self._tst_ptr = new_ptr
 
         # Return samples and labels
         return self.get_samples(idx=idx, split=split, as_list=False, simple_IDs=True)
 
     ###
-    ### Sample loaders and getters
+    # Sample loaders and getters
     ###
 
     def _load_sample(self, image_path=None, label_path=None, preprocess=True, as_tuple=False, is_training=False):
@@ -553,7 +574,7 @@ class OpticalFlowDataset(object):
                 image = self._images_train[l]
                 label = self._labels_train[l]
             else:
-                image, label = self._load_sample(self._images_train_path[l], self._labels_train_path[l],
+                image, label = self._load_sample(self._img_trn_path[l], self._lbl_trn_path[l],
                                                  is_training=True)
 
             # Crop images and/or labels to a fixed size, if requested
@@ -574,7 +595,7 @@ class OpticalFlowDataset(object):
                 scale_shape = (int(self.opts['scale_preproc'][0]), int(self.opts['scale_preproc'][1]))
                 image[0] = cv2.resize(image[0], scale_shape)
                 image[1] = cv2.resize(image[1], scale_shape)
-                label = cv2.resize(label, scale_shape) * scale_shape[0]/image[0].shape[0]
+                label = cv2.resize(label, scale_shape) * scale_shape[0] / image[0].shape[0]
 
             # Augment the samples, if requested
             if self.opts['aug_type'] is not None:
@@ -587,9 +608,9 @@ class OpticalFlowDataset(object):
             images.append(image)
             labels.append(label)
             if simple_IDs is True:
-                IDs.append(self._train_IDs_simplified[l])
+                IDs.append(self._trn_IDs_simpl[l])
             else:
-                IDs.append(self._train_IDs[l])
+                IDs.append(self._trn_IDs[l])
 
         return images, labels, IDs
 
@@ -608,7 +629,8 @@ class OpticalFlowDataset(object):
                 image = self._images_val[l]
                 label = self._labels_val[l]
             else:
-                image, label = self._load_sample(self._images_val_path[l], self._labels_val_path[l], preprocess=False, as_tuple=as_tuple)
+                image, label = self._load_sample(
+                    self._img_val_path[l], self._lbl_val_path[l], preprocess=False, as_tuple=as_tuple)
 
             # We also must crop validation images and labels to a fixed size during online evaluation.
             # Why do this with validation data? Because we are currently stuck with having the same
@@ -632,12 +654,12 @@ class OpticalFlowDataset(object):
                 scale_shape = (int(self.opts['scale_preproc'][0]), int(self.opts['scale_preproc'][1]))
                 image[0] = cv2.resize(image[0], scale_shape)
                 image[1] = cv2.resize(image[1], scale_shape)
-                label = cv2.resize(label, scale_shape) * scale_shape[0]/image[0].shape[0]
+                label = cv2.resize(label, scale_shape) * scale_shape[0] / image[0].shape[0]
 
             images.append(image)
             labels.append(label)
             if simple_IDs is True:
-                IDs.append(self._val_IDs_simplified[l])
+                IDs.append(self._val_IDs_simpl[l])
             else:
                 IDs.append(self._val_IDs[l])
 
@@ -657,10 +679,10 @@ class OpticalFlowDataset(object):
 
         pred_labels = []
         for l in idx:
-            # pred_label_path = self._labels_val_path[l].replace(self._val_label_folder, self._val_pred_label_folder)
-            # pred_label_path = self._pred_labels_val_path[l].replace('.pfm', '.flo').replace('.png', '.flo')
-            if os.path.exists(self._pred_labels_val_path[l]):
-                pred_label = self._load_sample(None, self._pred_labels_val_path[l], preprocess=False, as_tuple=as_tuple)
+            # pred_label_path = self._lbl_val_path[l].replace(self._val_lbl_dir, self._val_pred_lbl_dir)
+            # pred_label_path = self._pred_lbl_val_path[l].replace('.pfm', '.flo').replace('.png', '.flo')
+            if os.path.exists(self._pred_lbl_val_path[l]):
+                pred_label = self._load_sample(None, self._pred_lbl_val_path[l], preprocess=False, as_tuple=as_tuple)
                 pred_labels.append(pred_label)
 
         return images, labels, pred_labels, IDs
@@ -679,10 +701,10 @@ class OpticalFlowDataset(object):
 
         pred_label_paths = []
         for l in idx:
-            # pred_label_path = self._labels_val_path[l].replace(self._val_label_folder, self._val_pred_label_folder)
+            # pred_label_path = self._lbl_val_path[l].replace(self._val_lbl_dir, self._val_pred_lbl_dir)
             # Always output to '.flo'
             # pred_label_path = pred_label_path.replace('.pfm', '.flo').replace('.png', '.flo')
-            pred_label_paths.append(self._pred_labels_val_path[l])
+            pred_label_paths.append(self._pred_lbl_val_path[l])
 
         return images, labels, pred_label_paths, IDs
 
@@ -700,17 +722,21 @@ class OpticalFlowDataset(object):
             if self.opts['in_memory']:
                 image = self._images_test[l]
             else:
-                image = self._load_sample(self._images_test_path[l], preprocess=False, as_tuple=as_tuple)
+                image = self._load_sample(self._img_tst_path[l], preprocess=False, as_tuple=as_tuple)
             images.append(image)
-            # pred_label_path = self._images_test_path[l][0].replace(self._test_folder, self._test_pred_label_folder)
-            # pred_label_path = pred_label_path.replace(self._test_IDs[l][0], self._test_IDs[l][2])
-            if os.path.exists(self._pred_labels_test_path[l]):
-                pred_label = self._load_sample(None, self._pred_labels_test_path[l], preprocess=False, as_tuple=as_tuple)
+            # pred_label_path = self._img_tst_path[l][0].replace(self._tst_dir, self._tst_pred_lbl_dir)
+            # pred_label_path = pred_label_path.replace(self._tst_IDs[l][0], self._tst_IDs[l][2])
+            if os.path.exists(self._pred_lbl_tst_path[l]):
+                pred_label = self._load_sample(
+                    None,
+                    self._pred_lbl_tst_path[l],
+                    preprocess=False,
+                    as_tuple=as_tuple)
                 pred_labels.append(pred_label)
             if simple_IDs is True:
-                IDs.append(self._test_IDs_simplified[l])
+                IDs.append(self._tst_IDs_simpl[l])
             else:
-                IDs.append(self._test_IDs[l])
+                IDs.append(self._tst_IDs[l])
 
         return images, pred_labels, IDs
 
@@ -728,19 +754,27 @@ class OpticalFlowDataset(object):
             if self.opts['in_memory']:
                 image = self._images_test[l]
             else:
-                image = self._load_sample(self._images_test_path[l], preprocess=False, as_tuple=as_tuple)
+                image = self._load_sample(self._img_tst_path[l], preprocess=False, as_tuple=as_tuple)
             images.append(image)
-            # pred_label_path = self._images_test_path[l][0].replace(self._test_folder, self._test_pred_label_folder)
-            # pred_label_path = pred_label_path.replace(self._test_IDs[l][0], self._test_IDs[l][2])
-            pred_label_paths.append(self._pred_labels_test_path[l])
+            # pred_label_path = self._img_tst_path[l][0].replace(self._tst_dir, self._tst_pred_lbl_dir)
+            # pred_label_path = pred_label_path.replace(self._tst_IDs[l][0], self._tst_IDs[l][2])
+            pred_label_paths.append(self._pred_lbl_tst_path[l])
             if simple_IDs is True:
-                IDs.append(self._test_IDs_simplified[l])
+                IDs.append(self._tst_IDs_simpl[l])
             else:
-                IDs.append(self._test_IDs[l])
+                IDs.append(self._tst_IDs[l])
 
         return images, pred_label_paths, IDs
 
-    def get_samples(self, num_samples=0, idx=None, split='val', as_list=True, deterministic=False, as_tuple=False, simple_IDs=False):
+    def get_samples(
+            self,
+            num_samples=0,
+            idx=None,
+            split='val',
+            as_list=True,
+            deterministic=False,
+            as_tuple=False,
+            simple_IDs=False):
         """Get a few (or all) random (or ordered) samples from the dataset.
         Used for debugging purposes (testing how the model is improving over time, for instance).
         If sampling from the training/validation set, there is a label; otherwise, there isn't.
@@ -748,7 +782,7 @@ class OpticalFlowDataset(object):
         Args:
             num_samples: Number of samples to return (used only if idx is set to None)
             idx: Specific list of indices to pull from the dataset split (no need to set num_samples in this case)
-            split: Possible options: 'train', 'val', 'val_with_preds', 'val_with_pred_paths', 'test', 'test_with_preds', 'test_with_pred_paths'
+            split: 'train','val','val_with_preds','val_with_pred_paths','test','test_with_preds','test_with_pred_paths'
             as_list: Return as list or np array?
             return_IDs: If True, also return ID of the sample
             deterministic: If True, return first num_samples samples, otherwise, sample randomly
@@ -761,15 +795,15 @@ class OpticalFlowDataset(object):
             images: Batch of image pairs in format [num_samples, 2, H, W, 3]
             output_files: List of output file names that match the input file names
         """
-        assert(idx is not None or num_samples>0)
+        assert(idx is not None or num_samples > 0)
 
         if split == 'train':
             assert(self.mode in ['train_noval', 'train_with_val'])
             if idx is None:
                 if deterministic:
-                    idx = self._train_idx[0:num_samples]
+                    idx = self._trn_idx[0:num_samples]
                 else:
-                    idx = np.random.choice(self._train_idx, size=num_samples, replace=False)
+                    idx = np.random.choice(self._trn_idx, size=num_samples, replace=False)
 
             images, labels, IDs = self._get_train_samples(idx, as_tuple=as_tuple, simple_IDs=simple_IDs)
 
@@ -790,7 +824,7 @@ class OpticalFlowDataset(object):
 
             if as_list:
                 return images, gt_labels, IDs
-            else: 
+            else:
                 return map(np.asarray, (images, gt_labels, IDs))
 
         elif split == 'val_with_preds':
@@ -801,11 +835,12 @@ class OpticalFlowDataset(object):
                 else:
                     idx = np.random.choice(self._val_idx, size=num_samples, replace=False)
 
-            images, gt_labels, pred_labels, IDs = self._get_val_samples_with_preds(idx, as_tuple=as_tuple, simple_IDs=simple_IDs)
+            images, gt_labels, pred_labels, IDs = self._get_val_samples_with_preds(
+                idx, as_tuple=as_tuple, simple_IDs=simple_IDs)
 
             if as_list:
                 return images, gt_labels, pred_labels, IDs
-            else: 
+            else:
                 return map(np.asarray, (images, gt_labels, pred_labels, IDs))
 
         elif split == 'val_with_pred_paths':
@@ -816,63 +851,64 @@ class OpticalFlowDataset(object):
                 else:
                     idx = np.random.choice(self._val_idx, size=num_samples, replace=False)
 
-            images, gt_labels, pred_label_paths, IDs = self._get_val_samples_with_pred_paths(idx, as_tuple=as_tuple, simple_IDs=simple_IDs)
+            images, gt_labels, pred_label_paths, IDs = self._get_val_samples_with_pred_paths(
+                idx, as_tuple=as_tuple, simple_IDs=simple_IDs)
 
             if as_list:
                 return images, gt_labels, pred_label_paths, IDs
-            else: 
+            else:
                 return map(np.asarray, (images, gt_labels, pred_label_paths, IDs))
 
         elif split == 'test':
             if idx is None:
                 if deterministic:
-                    idx = self._test_idx[0:num_samples]
+                    idx = self._tst_idx[0:num_samples]
                 else:
-                    idx = np.random.choice(self._test_idx, size=num_samples, replace=False)
+                    idx = np.random.choice(self._tst_idx, size=num_samples, replace=False)
 
             images, IDs = [], []
             for l in idx:
                 if self.opts['in_memory']:
                     image = self._images_test[l]
                 else:
-                    image = self._load_sample(self._images_test_path[l], preprocess=False, as_tuple=as_tuple)
+                    image = self._load_sample(self._img_tst_path[l], preprocess=False, as_tuple=as_tuple)
                 images.append(image)
                 if simple_IDs is True:
-                    IDs.append(self._test_IDs_simplified[l])
+                    IDs.append(self._tst_IDs_simpl[l])
                 else:
-                    IDs.append(self._test_IDs[l])
+                    IDs.append(self._tst_IDs[l])
 
             if as_list:
                 return images, IDs
-            else: 
+            else:
                 return map(np.asarray, (images, IDs))
 
         elif split == 'test_with_preds':
             if idx is None:
                 if deterministic:
-                    idx = self._test_idx[0:num_samples]
+                    idx = self._tst_idx[0:num_samples]
                 else:
-                    idx = np.random.choice(self._test_idx, size=num_samples, replace=False)
+                    idx = np.random.choice(self._tst_idx, size=num_samples, replace=False)
 
             images, pred_labels, IDs = self._get_test_samples_with_preds(idx, as_tuple=as_tuple)
 
             if as_list:
                 return images, pred_labels, IDs
-            else: 
+            else:
                 return map(np.asarray, (images, pred_labels, IDs))
 
         elif split == 'test_with_pred_paths':
             if idx is None:
                 if deterministic:
-                    idx = self._test_idx[0:num_samples]
+                    idx = self._tst_idx[0:num_samples]
                 else:
-                    idx = np.random.choice(self._test_idx, size=num_samples, replace=False)
+                    idx = np.random.choice(self._tst_idx, size=num_samples, replace=False)
 
             images, pred_label_paths, IDs = self._get_test_samples_with_pred_paths(idx, as_tuple=as_tuple)
 
             if as_list:
                 return images, pred_label_paths, IDs
-            else: 
+            else:
                 return map(np.asarray, (images, pred_label_paths, IDs))
 
         else:
@@ -885,7 +921,7 @@ class OpticalFlowDataset(object):
         Doesn't return a valid np array if all the image pairs don't have the same size (use as_list=True instead).
         Args:
             idx: Specific list of flow IDs to pull from the dataset split
-            split: Possible options: 'train', 'val', 'val_with_preds', 'val_with_pred_paths', 'test', 'test_with_preds', 'test_with_pred_paths'
+            split: 'train','val','val_with_preds','val_with_pred_paths','test','test_with_preds','test_with_pred_paths'
             as_list: Return as list or np array?
             return_IDs: If True, also return ID of the sample
             as_tuple: If True, return image pairs as tuples; otherwise, return them as np arrays in [2, H, W, 3] format
@@ -898,11 +934,11 @@ class OpticalFlowDataset(object):
         """
         # Which split of IDs should we look into?
         if split == 'train':
-            IDs_to_search = self._train_IDs_simplified
+            IDs_to_search = self._trn_IDs_simpl
         elif split in ['val', 'val_with_preds', 'val_with_pred_paths']:
-            IDs_to_search = self._val_IDs_simplified
+            IDs_to_search = self._val_IDs_simpl
         elif split in ['test', 'test_with_preds', 'test_with_pred_paths']:
-            IDs_to_search = self._test_IDs_simplified
+            IDs_to_search = self._tst_IDs_simpl
         else:
             raise ValueError
 
@@ -920,9 +956,8 @@ class OpticalFlowDataset(object):
         else:
             raise ValueError
 
-
     ###
-    ### Various utility functions
+    # Various utility functions
     ###
     def simplify_IDs(self, IDs):
         """Simplify list of ID ID string tuples.
@@ -937,7 +972,7 @@ class OpticalFlowDataset(object):
         raise NotImplementedError
 
     ###
-    ### Debug utils
+    # Debug utils
     ###
     def print_config(self):
         """Display configuration values."""
@@ -946,14 +981,14 @@ class OpticalFlowDataset(object):
             print(f"  {k:20} {v}")
         print(f"  {'mode':20} {self.mode}")
         if self.mode in ['train_noval', 'train_with_val']:
-            print(f"  {'train size':20} {self.train_size}")
+            print(f"  {'train size':20} {self.trn_size}")
         if self.mode in ['train_with_val', 'val']:
             print(f"  {'val size':20} {self.val_size}")
         if self.mode == 'test':
-            print(f"  {'test size':20} {self.test_size}")
+            print(f"  {'test size':20} {self.tst_size}")
 
     ###
-    ### tf.data helpers
+    # tf.data helpers
     ###
     def _train_stub(self, idx):
         """tf.py_func stub for _get_train_samples()
@@ -1014,49 +1049,49 @@ class OpticalFlowDataset(object):
             https://towardsdatascience.com/how-to-use-dataset-in-tensorflow-c758ef9e4428
         """
         assert(split in ['train', 'val', 'test'])
-        threads = min(os.cpu_count(), 12) # os.cpu_count() returns 20 on SERVERP
+        threads = min(os.cpu_count(), 12)  # os.cpu_count() returns 20 on SERVERP
 
         # Use the train/val/test indices as the elements of the tf.data.Dataset
         if split == 'train':
             assert(self.mode in ['train_noval', 'train_with_val'])
-            tf_ds = tf.data.Dataset.from_tensor_slices(self._train_idx)
-            tf_ds = tf_ds.apply(tf.contrib.data.shuffle_and_repeat(buffer_size=len(self._train_idx), count=-1))
+            tf_ds = tf.data.Dataset.from_tensor_slices(self._trn_idx)
+            tf_ds = tf_ds.apply(tf.contrib.data.shuffle_and_repeat(buffer_size=len(self._trn_idx), count=-1))
             tf_ds = tf_ds.apply(tf.contrib.data.map_and_batch(
-                    map_func=lambda idx: tf.py_func(self._train_stub, [idx], [tf.uint8, tf.float32, tf.string]),
-                    batch_size=batch_size * num_gpus, num_parallel_batches=threads))
+                map_func=lambda idx: tf.py_func(self._train_stub, [idx], [tf.uint8, tf.float32, tf.string]),
+                batch_size=batch_size * num_gpus, num_parallel_batches=threads))
 
         elif split == 'val':
             assert(self.mode in ['val', 'val_notrain', 'train_noval', 'train_with_val'])
             tf_ds = tf.data.Dataset.from_tensor_slices(self._val_idx)
             tf_ds = tf_ds.apply(tf.contrib.data.shuffle_and_repeat(buffer_size=len(self._val_idx), count=-1))
             tf_ds = tf_ds.apply(tf.contrib.data.map_and_batch(
-                    map_func=lambda idx: tf.py_func(self._val_stub, [idx], [tf.uint8, tf.float32, tf.string]),
-                    batch_size=batch_size * num_gpus, num_parallel_batches=threads))
+                map_func=lambda idx: tf.py_func(self._val_stub, [idx], [tf.uint8, tf.float32, tf.string]),
+                batch_size=batch_size * num_gpus, num_parallel_batches=threads))
 
-        else: # if split == 'test':
-            tf_ds = tf.data.Dataset.from_tensor_slices(self._test_idx)
-            tf_ds = tf_ds.apply(tf.contrib.data.shuffle_and_repeat(buffer_size=len(self._test_idx), count=-1))
+        else:  # if split == 'test':
+            tf_ds = tf.data.Dataset.from_tensor_slices(self._tst_idx)
+            tf_ds = tf_ds.apply(tf.contrib.data.shuffle_and_repeat(buffer_size=len(self._tst_idx), count=-1))
             tf_ds = tf_ds.apply(tf.contrib.data.map_and_batch(
-                    map_func=lambda idx: tf.py_func(self._test_stub, [idx], [tf.uint8, tf.string]),
-                    batch_size=batch_size * num_gpus, num_parallel_batches=threads))
+                map_func=lambda idx: tf.py_func(self._test_stub, [idx], [tf.uint8, tf.string]),
+                batch_size=batch_size * num_gpus, num_parallel_batches=threads))
 
         # Return tf dataset
         return tf_ds
 
     ###
-    ### To look at later (TFRecords support):
+    # To look at later (TFRecords support):
     ###
-    ### https://github.com/sampepose/flownet2-tf/blob/master/src/dataloader.py for both TFRecords support and aug
-    ### https://github.com/fperazzi/davis-2017/blob/master/python/lib/davis/dataset/base.py
-    ### https://github.com/fperazzi/davis-2017/blob/master/python/lib/davis/dataset/loader.py
-    ### https://github.com/kwotsin/create_tfrecords
-    ### https://kwotsin.github.io/tech/2017/01/29/tfrecords.html
-    ### http://yeephycho.github.io/2016/08/15/image-data-in-tensorflow/
-    ### E:\repos\models-master\research\inception\inception\data\build_imagenet_data.py
-    ### E:\repos\models-master\research\object_detection\dataset_tools\create_kitti_tf_record.py
-    ### https://github.com/ferreirafabio/video2tfrecords/blob/master/video2tfrecords.py
-    ### http://www.machinelearninguru.com/deep_learning/tensorflow/basics/tfrecord/tfrecord.html
-    ### https://github.com/linchuming/ImageSR-Tensorflow/blob/master/data_loader.py
+    # https://github.com/sampepose/flownet2-tf/blob/master/src/dataloader.py for both TFRecords support and aug
+    # https://github.com/fperazzi/davis-2017/blob/master/python/lib/davis/dataset/base.py
+    # https://github.com/fperazzi/davis-2017/blob/master/python/lib/davis/dataset/loader.py
+    # https://github.com/kwotsin/create_tfrecords
+    # https://kwotsin.github.io/tech/2017/01/29/tfrecords.html
+    # http://yeephycho.github.io/2016/08/15/image-data-in-tensorflow/
+    # E:\repos\models-master\research\inception\inception\data\build_imagenet_data.py
+    # E:\repos\models-master\research\object_detection\dataset_tools\create_kitti_tf_record.py
+    # https://github.com/ferreirafabio/video2tfrecords/blob/master/video2tfrecords.py
+    # http://www.machinelearninguru.com/deep_learning/tensorflow/basics/tfrecord/tfrecord.html
+    # https://github.com/linchuming/ImageSR-Tensorflow/blob/master/data_loader.py
     ###
     def _load_from_tfrecords(self):
         pass

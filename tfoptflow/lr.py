@@ -20,6 +20,7 @@ Based on:
 from __future__ import absolute_import, division, print_function
 import tensorflow as tf
 
+
 def lr_multisteps_long(g_step_op, boundaries=None, values=None):
     """Setup the S<sub>long</sub> learning rate schedule introduced in E. Ilg et al.'s "FlowNet 2.0:
         Evolution of optical flow estimation with deep networks"
@@ -59,10 +60,11 @@ def lr_multisteps_long(g_step_op, boundaries=None, values=None):
         dataset using the S<sub>long</sub> learning rate schedule, starting from 0.0001 and reducing the learning
         rate by half at 0.4M, 0.6M, 0.8M, and 1M iterations.
     """
-    if boundaries == values == None:
+    if boundaries is None and values is None:
         boundaries = [400000, 600000, 800000, 1000000, 1200000]
         values = [0.0001 / (2 ** boundary) for boundary in range(len(boundaries) + 1)]
     return tf.train.piecewise_constant(g_step_op, boundaries, values, 'lr_multisteps')
+
 
 def lr_multisteps_fine(g_step_op, boundaries=None, values=None):
     """Setup the S<sub>fine</sub> learning rate schedule introduced in E. Ilg et al.'s "FlowNet 2.0:
@@ -72,10 +74,11 @@ def lr_multisteps_fine(g_step_op, boundaries=None, values=None):
         boundaries: Learning rate boundary changes
         values: Learning rate values after boundary changes
     """
-    if boundaries == values == None:
+    if boundaries is None and values is None:
         boundaries = [1400000, 1500000, 1600000, 1700000]
         values = [0.00001 / (2 ** boundary) for boundary in range(len(boundaries) + 1)]
     return tf.train.piecewise_constant(g_step_op, boundaries, values, 'lr_multisteps')
+
 
 def lr_cyclic_long(g_step_op, base_lr=None, max_lr=None, step_size=None):
     """Setup a cyclic learning rate for long pre-training
@@ -85,11 +88,12 @@ def lr_cyclic_long(g_step_op, base_lr=None, max_lr=None, step_size=None):
         max_lr:  Maximum learning rate bound.
         step_size: Number of iterations in half a cycle.
     """
-    if base_lr == max_lr == step_size == None:
+    if base_lr is None and max_lr is None and step_size is None:
         base_lr = 0.00001
         max_lr = 0.0001
         step_size = 10000
     return _lr_cyclic(g_step_op, base_lr, max_lr, step_size, op_name='lr_cyclic')
+
 
 def lr_cyclic_fine(g_step_op, base_lr=None, max_lr=None, step_size=None):
     """Setup a cyclic learning rate for fine-tuning
@@ -99,11 +103,12 @@ def lr_cyclic_fine(g_step_op, base_lr=None, max_lr=None, step_size=None):
         max_lr:  Maximum learning rate bound.
         step_size: Number of iterations in half a cycle.
     """
-    if base_lr == max_lr == step_size == None:
+    if base_lr is None and max_lr is None and step_size is None:
         base_lr = 0.000001
         max_lr = 0.00001
         step_size = 10000
     return _lr_cyclic(g_step_op, base_lr, max_lr, step_size, op_name='lr_cyclic')
+
 
 def _lr_cyclic(g_step_op, base_lr=None, max_lr=None, step_size=None, gamma=0.99994, mode='triangular2', op_name=None):
     """Computes a cyclic learning rate, based on L.N. Smith's "Cyclical learning rates for training neural networks."
@@ -162,7 +167,7 @@ def _lr_cyclic(g_step_op, base_lr=None, max_lr=None, step_size=None, gamma=0.999
     clr = tf.multiply(a1, a2)
 
     if mode == 'triangular2':
-        clr = tf.divide(clr, tf.cast(tf.pow(2, tf.cast(cycle-1, tf.int32)), tf.float32))
+        clr = tf.divide(clr, tf.cast(tf.pow(2, tf.cast(cycle - 1, tf.int32)), tf.float32))
     if mode == 'exp_range':
         clr = tf.multiply(tf.pow(gamma, global_step), clr)
 

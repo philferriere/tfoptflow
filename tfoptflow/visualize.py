@@ -14,7 +14,16 @@ import matplotlib.pyplot as plt
 from utils import clean_dst_file
 from optflow import flow_to_img
 
-def plot_img_pairs_w_flows(img_pairs, flow_pyrs=None, num_lvls=0, flow_preds=None, flow_gts=None, titles=None, info_texts=None, flow_mag_max=None):
+
+def plot_img_pairs_w_flows(
+        img_pairs,
+        flow_pyrs=None,
+        num_lvls=0,
+        flow_preds=None,
+        flow_gts=None,
+        titles=None,
+        info=None,
+        flow_mag_max=None):
     """Plot the given set of image pairs, optionally with flows and titles.
     Args:
         img_pairs: image pairs in [batch_size, 2, H, W, 3] or list([2, H, W, 3]) format.
@@ -23,7 +32,7 @@ def plot_img_pairs_w_flows(img_pairs, flow_pyrs=None, num_lvls=0, flow_preds=Non
         flow_preds: optional, predicted flows in [batch_size, H, W, 2] or list([H, W, 2]) format.
         flow_gts: optional, groundtruth flows in [batch_size, H, W, 2] or list([H, W, 2]) format.
         titles: optional, list of image and flow IDs to display with each image.
-        info_texts: optional, stats to display above predicted flow
+        info: optional, stats to display above predicted flow
         flow_mag_max: Max flow to map to 255
     Returns:
         plt: plot
@@ -51,7 +60,7 @@ def plot_img_pairs_w_flows(img_pairs, flow_pyrs=None, num_lvls=0, flow_preds=Non
             plt.title(titles[row][0], fontsize=fig_width * 2)
         plt.axis('off')
         plt.imshow(img_pairs[row][0])
-        plt.subplot(row_count, col_count, plot+1)
+        plt.subplot(row_count, col_count, plot + 1)
         if titles is not None:
             plt.title(titles[row][1], fontsize=fig_width * 2)
         plt.axis('off')
@@ -61,7 +70,7 @@ def plot_img_pairs_w_flows(img_pairs, flow_pyrs=None, num_lvls=0, flow_preds=Non
         # Plot predicted flow, if any
         if flow_preds is not None:
             plt.subplot(row_count, col_count, plot)
-            title = "predicted flow " + info_texts[row] if info_texts is not None else "predicted flow"
+            title = "predicted flow " + info[row] if info is not None else "predicted flow"
             plt.title(title, fontsize=fig_width * 2)
             plt.axis('off')
             plt.imshow(flow_to_img(flow_preds[row], flow_mag_max=flow_mag_max))
@@ -91,20 +100,35 @@ def plot_img_pairs_w_flows(img_pairs, flow_pyrs=None, num_lvls=0, flow_preds=Non
     plt.tight_layout()
     return plt
 
-def display_img_pairs_w_flows(img_pairs, flow_preds=None, flow_gts=None, titles=None, info_texts=None, flow_mag_max=None):
+
+def display_img_pairs_w_flows(
+        img_pairs,
+        flow_preds=None,
+        flow_gts=None,
+        titles=None,
+        info=None,
+        flow_mag_max=None):
     """Display the given set of image pairs, optionally with flows and titles.
     Args:
         img_pairs: image pairs in [batch_size, 2, H, W, 3] or list([2, H, W, 3]) format.
         flow_preds: optional, predicted flows in [batch_size, H, W, 2] or list([H, W, 2]) format.
         flow_gts: optional, groundtruth flows in [batch_size, H, W, 2] or list([H, W, 2]) format.
         titles: optional, list of image and flow IDs to display with each image.
-        info_texts: optional, stats to display above predicted flow
+        info: optional, stats to display above predicted flow
         flow_mag_max: Max flow to map to 255
     """
-    plt = plot_img_pairs_w_flows(img_pairs, None, 0, flow_preds, flow_gts, titles, info_texts, flow_mag_max)
+    plt = plot_img_pairs_w_flows(img_pairs, None, 0, flow_preds, flow_gts, titles, info, flow_mag_max)
     plt.show()
 
-def archive_img_pairs_w_flows(img_pairs, dst_file, flow_preds=None, flow_gts=None, titles=None, info_texts=None, flow_mag_max=None):
+
+def archive_img_pairs_w_flows(
+        img_pairs,
+        dst_file,
+        flow_preds=None,
+        flow_gts=None,
+        titles=None,
+        info=None,
+        flow_mag_max=None):
     """Plot and save to disk te given set of image pairs, optionally with flows and titles.
     Args:
         img_pairs: image pairs in [batch_size, 2, H, W, 3] or list([2, H, W, 3]) format.
@@ -112,7 +136,7 @@ def archive_img_pairs_w_flows(img_pairs, dst_file, flow_preds=None, flow_gts=Non
         flow_preds: optional, predicted flows in [batch_size, H, W, 2] or list([H, W, 2]) format.
         flow_gts: optional, groundtruth flows in [batch_size, H, W, 2] or list([H, W, 2]) format.
         titles: optional, list of image and flow IDs to display with each image.
-        info_texts: optional, stats to display above predicted flow
+        info: optional, stats to display above predicted flow
         flow_mag_max: Max flow to map to 255
     """
     # Create the output folder, if necessary
@@ -120,11 +144,20 @@ def archive_img_pairs_w_flows(img_pairs, dst_file, flow_preds=None, flow_gts=Non
     clean_dst_file(dst_file)
 
     # Build plot and save it to disk
-    plt = plot_img_pairs_w_flows(img_pairs, None, 0, flow_preds, flow_gts, titles, info_texts, flow_mag_max)
+    plt = plot_img_pairs_w_flows(img_pairs, None, 0, flow_preds, flow_gts, titles, info, flow_mag_max)
     plt.savefig(dst_file, bbox_inches='tight', pad_inches=0.1)
     plt.close()
 
-def display_img_pairs_w_flow_pyrs(img_pairs, flow_pyrs=None, num_lvls=0, flow_preds=None, flow_gts=None, titles=None, info_texts=None, flow_mag_max=None):
+
+def display_img_pairs_w_flow_pyrs(
+        img_pairs,
+        flow_pyrs=None,
+        num_lvls=0,
+        flow_preds=None,
+        flow_gts=None,
+        titles=None,
+        info=None,
+        flow_mag_max=None):
     """Display the given set of image pairs, optionally with flows and titles.
     Args:
         img_pairs: image pairs in [batch_size, 2, H, W, 3] or list([2, H, W, 3]) format.
@@ -133,13 +166,23 @@ def display_img_pairs_w_flow_pyrs(img_pairs, flow_pyrs=None, num_lvls=0, flow_pr
         flow_preds: optional, predicted flows in [batch_size, H, W, 2] or list([H, W, 2]) format.
         flow_gts: optional, groundtruth flows in [batch_size, H, W, 2] or list([H, W, 2]) format.
         titles: optional, list of image and flow IDs to display with each image.
-        info_texts: optional, stats to display above predicted flow
+        info: optional, stats to display above predicted flow
         flow_mag_max: Max flow to map to 255
     """
-    plt = plot_img_pairs_w_flows(img_pairs, flow_pyrs, num_lvls, flow_preds, flow_gts, titles, info_texts, flow_mag_max)
+    plt = plot_img_pairs_w_flows(img_pairs, flow_pyrs, num_lvls, flow_preds, flow_gts, titles, info, flow_mag_max)
     plt.show()
 
-def archive_img_pairs_w_flow_pyrs(img_pairs, dst_file, flow_pyrs=None, num_lvls=0, flow_preds=None, flow_gts=None, titles=None, info_texts=None, flow_mag_max=None):
+
+def archive_img_pairs_w_flow_pyrs(
+        img_pairs,
+        dst_file,
+        flow_pyrs=None,
+        num_lvls=0,
+        flow_preds=None,
+        flow_gts=None,
+        titles=None,
+        info=None,
+        flow_mag_max=None):
     """Plot and save to disk te given set of image pairs, optionally with flows and titles.
     Args:
         img_pairs: image pairs in [batch_size, 2, H, W, 3] or list([2, H, W, 3]) format.
@@ -149,7 +192,7 @@ def archive_img_pairs_w_flow_pyrs(img_pairs, dst_file, flow_pyrs=None, num_lvls=
         flow_preds: optional, predicted flows in [batch_size, H, W, 2] or list([H, W, 2]) format.
         flow_gts: optional, groundtruth flows in [batch_size, H, W, 2] or list([H, W, 2]) format.
         titles: optional, list of image and flow IDs to display with each image.
-        info_texts: optional, stats to display above predicted flow
+        info: optional, stats to display above predicted flow
         flow_mag_max: Max flow to map to 255
     """
     # Create the output folder, if necessary
@@ -157,7 +200,6 @@ def archive_img_pairs_w_flow_pyrs(img_pairs, dst_file, flow_pyrs=None, num_lvls=
     clean_dst_file(dst_file)
 
     # Build plot and save it to disk
-    plt = plot_img_pairs_w_flows(img_pairs, flow_pyrs, num_lvls, flow_preds, flow_gts, titles, info_texts, flow_mag_max)
+    plt = plot_img_pairs_w_flows(img_pairs, flow_pyrs, num_lvls, flow_preds, flow_gts, titles, info, flow_mag_max)
     plt.savefig(dst_file, bbox_inches='tight', pad_inches=0.1)
     plt.close()
-

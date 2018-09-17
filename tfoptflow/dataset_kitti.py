@@ -22,9 +22,11 @@ _KITTI2012_ROOT = _DATASET_ROOT + 'KITTI12'
 _KITTI2015_ROOT = _DATASET_ROOT + 'KITTI15'
 _KITTI_ROOT = _KITTI2015_ROOT
 
+
 class KITTIDataset(OpticalFlowDataset):
     """KITTI optical flow dataset.
     """
+
     def __init__(self, mode='train_with_val', ds_root=_KITTI_ROOT, options=_DEFAULT_DS_TRAIN_OPTIONS):
         """Initialize the KITTIDataset object
         Args:
@@ -35,9 +37,9 @@ class KITTIDataset(OpticalFlowDataset):
             KITTI2012: training flow mag min=0.0, avg=6.736172669242419, max=232.20108032226562 (194 flows)
             KITTI2015: raining flow mag min=0.0, avg=4.7107220490319, max=256.4881896972656 (200 flows)
         """
-        self.min_flow_mag = 0.
-        self.avg_flow_mag = 4.7107220490319
-        self.max_flow_mag = 256.4881896972656
+        self.min_flow = 0.
+        self.avg_flow = 4.7107220490319
+        self.max_flow = 256.4881896972656
         super().__init__(mode, ds_root, options)
         assert(self.opts['type'] in ['noc', 'occ'])
 
@@ -45,28 +47,28 @@ class KITTIDataset(OpticalFlowDataset):
         """Set the train, val, test, label and prediction label folders.
         Overriden by each dataset. Called by the base class on init.
         Sample results:
-            self._train_folder           = 'E:/datasets/KITTI12/training/colored_0'
-            self._train_label_folder     = 'E:/datasets/KITTI12/training/flow_occ'
-            self._val_folder             = 'E:/datasets/KITTI12/training/colored_0'
-            self._val_label_folder       = 'E:/datasets/KITTI12/training/flow_occ'
-            self._val_pred_label_folder  = 'E:/datasets/KITTI12/training/flow_occ_pred'
-            self._test_folder            = 'E:/datasets/KITTI12/testing/colored_0'
-            self._test_pred_label_folder = 'E:/datasets/KITTI12/testing/flow_occ_pred'
+            self._trn_dir          = 'E:/datasets/KITTI12/training/colored_0'
+            self._trn_lbl_dir      = 'E:/datasets/KITTI12/training/flow_occ'
+            self._val_dir          = 'E:/datasets/KITTI12/training/colored_0'
+            self._val_lbl_dir      = 'E:/datasets/KITTI12/training/flow_occ'
+            self._val_pred_lbl_dir = 'E:/datasets/KITTI12/training/flow_occ_pred'
+            self._tst_dir          = 'E:/datasets/KITTI12/testing/colored_0'
+            self._tst_pred_lbl_dir = 'E:/datasets/KITTI12/testing/flow_occ_pred'
         """
         if os.path.exists(self._ds_root + '/training/colored_0'):
-            self._train_folder = self._ds_root + '/training/colored_0'
-            self._test_folder = self._ds_root + '/testing/colored_0'
+            self._trn_dir = self._ds_root + '/training/colored_0'
+            self._tst_dir = self._ds_root + '/testing/colored_0'
         elif os.path.exists(self._ds_root + '/training/image_2'):
-            self._train_folder = self._ds_root + '/training/image_2'
-            self._test_folder = self._ds_root + '/testing/image_2'
+            self._trn_dir = self._ds_root + '/training/image_2'
+            self._tst_dir = self._ds_root + '/testing/image_2'
         else:
             raise IOError
-        self._val_folder = self._train_folder
+        self._val_dir = self._trn_dir
 
-        self._train_label_folder = self._ds_root + '/training/flow_' + self.opts['type']
-        self._val_label_folder = self._train_label_folder
-        self._val_pred_label_folder = self._ds_root + '/training/flow_' + self.opts['type'] + '_pred'
-        self._test_pred_label_folder = self._ds_root + '/testing/flow_' + self.opts['type'] + '_pred'
+        self._trn_lbl_dir = self._ds_root + '/training/flow_' + self.opts['type']
+        self._val_lbl_dir = self._trn_lbl_dir
+        self._val_pred_lbl_dir = self._ds_root + '/training/flow_' + self.opts['type'] + '_pred'
+        self._tst_pred_lbl_dir = self._ds_root + '/testing/flow_' + self.opts['type'] + '_pred'
 
     def _build_ID_sets(self):
         """Build the list of samples and their IDs, split them in the proper datasets.
@@ -77,30 +79,30 @@ class KITTIDataset(OpticalFlowDataset):
         For the test dataset, they look like ('000000_10.png', '00000_11.png', '000000_10.flo')
         """
         # Search the train folder for the samples, create string IDs for them
-        frames = sorted(os.listdir(self._train_folder))
+        frames = sorted(os.listdir(self._trn_dir))
         self._IDs, idx = [], 0
         while idx < len(frames) - 1:
-            self._IDs.append((frames[idx], frames[idx+1], frames[idx]))
+            self._IDs.append((frames[idx], frames[idx + 1], frames[idx]))
             idx += 2
 
         # Build the train/val datasets
         if self.opts['val_split'] > 0.:
-            self._train_IDs, self._val_IDs = train_test_split(self._IDs, test_size=self.opts['val_split'],
-                                                                  random_state=self.opts['random_seed'])
+            self._trn_IDs, self._val_IDs = train_test_split(self._IDs, test_size=self.opts['val_split'],
+                                                            random_state=self.opts['random_seed'])
         else:
-            self._train_IDs, self._val_IDs = self._IDs, None
+            self._trn_IDs, self._val_IDs = self._IDs, None
 
         # Build the test dataset
-        self._test_IDs, idx = [], 0
-        frames = sorted(os.listdir(self._test_folder))
+        self._tst_IDs, idx = [], 0
+        frames = sorted(os.listdir(self._tst_dir))
         while idx < len(frames) - 1:
             flow_ID = frames[idx].replace('.png', '.flo')
-            self._test_IDs.append((frames[idx], frames[idx+1], flow_ID))
+            self._tst_IDs.append((frames[idx], frames[idx + 1], flow_ID))
             idx += 2
 
-        self._train_IDs_simplified = self.simplify_IDs(self._train_IDs)
-        self._val_IDs_simplified = self.simplify_IDs(self._val_IDs)
-        self._test_IDs_simplified = self.simplify_IDs(self._test_IDs)
+        self._trn_IDs_simpl = self.simplify_IDs(self._trn_IDs)
+        self._val_IDs_simpl = self.simplify_IDs(self._val_IDs)
+        self._tst_IDs_simpl = self.simplify_IDs(self._tst_IDs)
 
     def simplify_IDs(self, IDs):
         """Simplify list of ID string tuples.
@@ -123,8 +125,9 @@ class KITTIDataset(OpticalFlowDataset):
         """
         flow_mags = []
         desc = "Collecting training flow stats"
-        with tqdm(total=len(self._labels_train_path), desc=desc, ascii=True, ncols=100) as pbar:
-            for flow_path in self._labels_train_path:
+        num_flows = len(self._lbl_trn_path)
+        with tqdm(total=num_flows, desc=desc, ascii=True, ncols=100) as pbar:
+            for flow_path in self._lbl_trn_path:
                 pbar.update(1)
                 flow = flow_read(flow_path)
                 flow_magnitude, _ = cv2.cartToPolar(flow[..., 0], flow[..., 1])
@@ -141,5 +144,6 @@ class KITTIDataset(OpticalFlowDataset):
         masked.mask = True
         for idx, flow_mag in enumerate(flow_mags):
             masked[:flow_mag.shape[0], :flow_mag.shape[1], idx] = flow_mag
-        self.min_flow_mag, self.avg_flow_mag, self.max_flow_mag = np.min(masked), np.mean(masked), np.max(masked)
-        print(f"training flow mag min={self.min_flow_mag}, avg={self.avg_flow_mag}, max={self.max_flow_mag} ({len(self._labels_train_path)} flows)")
+        self.min_flow, self.avg_flow, self.max_flow = np.min(masked), np.mean(masked), np.max(masked)
+        print(
+            f"training flow min={self.min_flow}, avg={self.avg_flow}, max={self.max_flow} ({num_flows} flows)")
