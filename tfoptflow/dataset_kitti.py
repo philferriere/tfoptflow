@@ -25,6 +25,8 @@ _KITTI_ROOT = _KITTI2015_ROOT
 
 class KITTIDataset(OpticalFlowDataset):
     """KITTI optical flow dataset.
+    List of adapted KITTI12 sizes: [(1, 375, 1242, 2), (1, 370, 1226, 2), (1, 376, 1241, 2), (1, 374, 1238, 2)]
+    List of adapted KITTI15 sizes: [(1, 375, 1242, 2), (1, 370, 1224, 2), (1, 376, 1241, 2), (1, 374, 1238, 2)]
     """
 
     def __init__(self, mode='train_with_val', ds_root=_KITTI_ROOT, options=_DEFAULT_DS_TRAIN_OPTIONS):

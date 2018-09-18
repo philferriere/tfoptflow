@@ -52,7 +52,7 @@ Please note that we trained these models using slightly different dataset and le
 
 | Model name | Noteboks | FlyingChairs AEPE | Sintel clean AEPE | Sintel final AEPE |
 | :---: | :---: | :---: | :---: | :---: |
-| `pwcnet-lg-6-2-multisteps-chairsthingsmix` | [train](tfoptflow/pwcnet_train_lg-6-2-multisteps-chairsthingsmix.ipynb) | 1.54 ([notebook](tfoptflow/pwcnet_eval_lg-6-2-multisteps-chairsthingsmix_flyingchairs.ipynb)) | 2.75 ([notebook](tfoptflow/pwcnet_eval_lg-6-2-multisteps-chairsthingsmix_mpisintelclean.ipynb)) | 3.89 ([notebook](tfoptflow/pwcnet_eval_lg-6-2-multisteps-chairsthingsmix_mpisintelfinal.ipynb)) |
+| `pwcnet-lg-6-2-multisteps-chairsthingsmix` | [train](tfoptflow/pwcnet_train_lg-6-2-multisteps-chairsthingsmix.ipynb) | 1.50 ([notebook](tfoptflow/pwcnet_eval_lg-6-2-multisteps-chairsthingsmix_flyingchairs.ipynb)) | 2.69 ([notebook](tfoptflow/pwcnet_eval_lg-6-2-multisteps-chairsthingsmix_mpisintelclean.ipynb)) | 3.78 ([notebook](tfoptflow/pwcnet_eval_lg-6-2-multisteps-chairsthingsmix_mpisintelfinal.ipynb)) |
 | `pwcnet-sm-6-2-multisteps-chairsthingsmix` | coming soon | coming soon | coming soon | coming soon |
 
 As a reference, here are the official, reported results:
