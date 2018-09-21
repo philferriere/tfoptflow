@@ -42,6 +42,8 @@ _DEFAULT_PWCNET_TRAIN_OPTIONS = {
     'y_dtype': tf.float32,  # u,v flows output type
     'y_shape': [384, 448, 2],  # u,v flows output shape [H, W, 2]
     'train_mode': 'train',  # in ['train', 'fine-tune']
+    'adapt_info': None,  # if predicted flows are padded by the model, crop them back by to this size
+    'sparse_gt_flow': False,  # if gt flows are sparse (KITTI), only compute average EPE where gt flows aren't (0., 0.)
     # Logging/Snapshot params
     'display_step': 100,  # show progress every 100 training batches
     'snapshot_step': 1000,  # save trained model every 1000 training batches
@@ -98,6 +100,8 @@ _DEFAULT_PWCNET_FINETUNE_OPTIONS = {
     'y_dtype': tf.float32,  # u,v flows output type
     'y_shape': [384, 768, 2],  # u,v flows output shape [H, W, 2]
     'train_mode': 'fine-tune',  # in ['train', 'fine-tune']
+    'adapt_info': None,  # if predicted flows are padded by the model, crop them back by to this size
+    'sparse_gt_flow': False,  # if gt flows are sparse (KITTI), only compute average EPE where gt flows aren't (0., 0.)
     # Logging/Snapshot params
     'display_step': 100,  # show progress every 100 training batches
     'snapshot_step': 1000,  # save trained model every 1000 training batches
