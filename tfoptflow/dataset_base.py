@@ -995,24 +995,25 @@ class OpticalFlowDataset(object):
         Args:
             idx: Index of unique sample to return
         Returns:
-            image: Image in [2, H, W, 3] format
-            label: Label in [H, W, 2] format
+            x: Image pair in [2, H, W, 3] format
+            y: Groundtruth flow in [H, W, 2] format
             ID: string, sample ID
         """
-        image, label, ID = self.get_samples(idx=[idx], split='train', as_list=False, simple_IDs=True)
-        return np.squeeze(image), np.squeeze(label), ID[0]
+        x, y, ID = self.get_samples(idx=[idx], split='train', as_list=False, simple_IDs=True)
+        return np.squeeze(x), np.squeeze(y), ID[0]
 
     def _val_stub(self, idx):
         """tf.py_func stub for _get_val_samples()
         Args:
             idx: Index of unique sample to return
         Returns:
-            image: Image in [2, H, W, 3] format
-            label: Label in [H, W, 2] format
+            x: Image pair in [2, H, W, 3] format
+            y: Groundtruth flow in [H, W, 2] format
+            path: string, destination path where to save the predicted flow
             ID: string, sample ID
         """
-        image, label, ID = self.get_samples(idx=[idx], split='val', as_list=False, simple_IDs=True)
-        return np.squeeze(image), np.squeeze(label), ID[0]
+        x, y, path, ID = self.get_samples(idx=[idx], split='val_with_pred_paths', as_list=False, simple_IDs=True)
+        return np.squeeze(x), np.squeeze(y), path[0], ID[0]
 
     def _test_stub(self, idx):
         """tf.py_func stub for _get_test_samples()
@@ -1065,7 +1066,7 @@ class OpticalFlowDataset(object):
             tf_ds = tf.data.Dataset.from_tensor_slices(self._val_idx)
             tf_ds = tf_ds.apply(tf.contrib.data.shuffle_and_repeat(buffer_size=len(self._val_idx), count=-1))
             tf_ds = tf_ds.apply(tf.contrib.data.map_and_batch(
-                map_func=lambda idx: tf.py_func(self._val_stub, [idx], [tf.uint8, tf.float32, tf.string]),
+                map_func=lambda idx: tf.py_func(self._val_stub, [idx], [tf.uint8, tf.float32, tf.string, tf.string]),
                 batch_size=batch_size * num_gpus, num_parallel_batches=threads))
 
         else:  # if split == 'test':
