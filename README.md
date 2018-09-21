@@ -4,7 +4,7 @@ This repo provides a TensorFlow-based implementation of the wonderful paper "PWC
 
 There are already a few attempts at implementing PWC-Net using TensorFlow out there. However, they either use outdated architectures of the paper's CNN networks, only provide TF inference (no TF training), only work on Linux platforms, and do not support multi-GPU training.
 
-This implementation provides **both TF-based training and inference**. It is **portable**: because it doesn't use any dynamically loaded CUDA-based TensorFlow user ops, it **works on Linux and Windows**. It also **supports multi-GPU training** (the notebooks and results shown here were collected on a GTX 1080 Ti paired with a Titan X). Even though the code **allows for mixed-precision training**, we were unable to make the training converge (so, only use this feature at your own risk!).
+This implementation provides **both TF-based training and inference**. It is **portable**: because it doesn't use any dynamically loaded CUDA-based TensorFlow user ops, it **works on Linux and Windows**. It also **supports multi-GPU training** (the notebooks and results shown here were collected on a GTX 1080 Ti paired with a Titan X). The code also allows for **mixed-precision training**.
 
 Finally, as shown in the ["Links to pre-trained models"](#links) section, we achieve better results than the ones reported in the official paper on the challenging MPI-Sintel 'final' dataset.
 

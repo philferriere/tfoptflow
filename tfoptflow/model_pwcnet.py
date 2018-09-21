@@ -20,6 +20,7 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 from tqdm import trange
+from tensorflow.contrib.mixed_precision import LossScaleOptimizer, FixedLossScaleManager
 
 from model_base import ModelBase
 from optflow import flow_write, flow_write_as_png, flow_mag_stats
@@ -61,7 +62,7 @@ _DEFAULT_PWCNET_TRAIN_OPTIONS = {
     # Training config and hyper-params
     'use_tf_data': True,  # Set to True to get data from tf.data.Dataset; otherwise, use feed_dict with numpy
     'use_mixed_precision': False,  # Set to True to use mixed precision training (fp16 inputs)
-    'loss_scaler': 8.,  # Loss scaler (only used in mixed precision training)
+    'loss_scaler': 128.,  # Loss scaler (only used in mixed precision training)
     'batch_size': 8,
     'lr_policy': 'multisteps',  # choose between None, 'multisteps', and 'cyclic'; adjust the max_steps below too
     # Multistep lr schedule
@@ -117,7 +118,7 @@ _DEFAULT_PWCNET_FINETUNE_OPTIONS = {
     # Training config and hyper-params
     'use_tf_data': True,  # Set to True to get data from tf.data.Dataset; otherwise, use feed_dict with numpy
     'use_mixed_precision': False,  # Set to True to use mixed precision training (fp16 inputs)
-    'loss_scaler': 8.,  # Loss scaler (only used in mixed precision training)
+    'loss_scaler': 128.,  # Loss scaler (only used in mixed precision training)
     'batch_size': 4,
     'lr_policy': 'multisteps',  # choose between None, 'multisteps', and 'cyclic'; adjust the max_steps below too
     # Multistep lr schedule
@@ -538,14 +539,14 @@ class ModelPWCNet(ModelBase):
             self.optim = tf.train.ProximalGradientDescentOptimizer(self.lr)
 
         if self.opts['use_mixed_precision'] is True:
-            # Breakdown backward pass steps so we can scale the gradients appropriately
-            # Raise the exponent during the backward pass in float16
-            grads, vars = zip(*self.optim.compute_gradients(self.loss_op * self.opts['loss_scaler']))
-            # Return the gradients (now float32) to the correct exponent and keep them in check
-            grads = [grad / self.opts['loss_scaler'] for grad in grads]
-            grads, _ = tf.clip_by_global_norm(grads, 5.0)
-            # Apply the gradients as usual
-            self.optim_op = self.optim.apply_gradients(zip(grads, vars), self.g_step_op)
+            # Choose a loss scale manager which decides how to pick the right loss scale throughout the training process.
+            loss_scale_mgr = FixedLossScaleManager(self.opts['loss_scaler'])
+
+            # Wrap the original optimizer in a LossScaleOptimizer
+            self.optim = LossScaleOptimizer(self.optim, loss_scale_mgr)
+
+            # Let minimize() take care of both computing the gradients and applying them to the model variables
+            self.optim_op = self.optim.minimize(self.loss_op, self.g_step_op, tf.trainable_variables())
         else:
             # Let minimize() take care of both computing the gradients and applying them to the model variables
             self.optim_op = self.optim.minimize(self.loss_op, self.g_step_op, tf.trainable_variables())
