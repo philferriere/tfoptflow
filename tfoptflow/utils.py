@@ -11,6 +11,7 @@ Licensed under the MIT License (see LICENSE for details)
 from __future__ import absolute_import, division, print_function
 import os
 import numpy as np
+import tensorflow as tf
 import cv2
 
 
@@ -27,6 +28,23 @@ def clean_dst_file(dst_file):
     # Empty the output folder of previous predictions, if any
     if os.path.exists(dst_file):
         os.remove(dst_file)
+
+
+def tf_where(condition, x=None, y=None, *args, **kwargs):
+    """tf.where does not support broadcasting like its numpy equivaleny. This function implements it.
+    Args:
+        Same as tf.where
+    Refs:
+        - Broadcasting support in `tf.where
+        https://github.com/tensorflow/tensorflow/issues/9284#issuecomment-294778959
+        Written by Till Hoffmann
+    """
+    if x is None and y is None:
+        return tf.where(condition, x, y, *args, **kwargs)
+    else:
+        _shape = tf.broadcast_dynamic_shape(tf.shape(condition), tf.shape(x))
+        _broadcaster = tf.ones(_shape)
+        return tf.where(condition & (_broadcaster > 0.0), x * _broadcaster, y * _broadcaster, *args, **kwargs)
 
 
 def scale(img, zoom_factor):

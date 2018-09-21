@@ -29,6 +29,13 @@ class ModelBase:
             mode: Must be in ['train_noval', 'val', 'train_with_val', 'test']
             session: optional TF session
             options: see _DEFAULT_PWCNET_TRAIN_OPTIONS comments
+        Mote:
+            As explained [here](https://stackoverflow.com/a/36282423), you don't need to use with blocks if you only
+            have one default graph and one default session. However, we sometimes create notebooks where we pit the
+            performance of models against each other. Because of that, we need the with block.
+            # tf.reset_default_graph()
+            # self.graph = tf.Graph()
+            # with self.graph.as_default():
         """
         assert(mode in ['train_noval', 'train_with_val', 'val', 'val_notrain', 'test'])
         self.mode, self.sess, self.opts = mode, session, options
@@ -49,11 +56,12 @@ class ModelBase:
                     self.opts['cyclic_lr_stepsize'] = 50
                     self.opts['max_steps'] = 500  # max number of training iterations (i.e., batches to run)
 
-        # Configure a TF session, if one doesn't already exist
-        self.config_session(session)
+        with tf.Graph().as_default():
+            # Configure a TF session, if one doesn't already exist
+            self.config_session(session)
 
-        # Build the TF graph
-        self.build_graph()
+            # Build the TF graph
+            self.build_graph()
 
     ###
     # Session mgmt
@@ -208,12 +216,6 @@ class ModelBase:
     def build_graph(self):
         """ Build the complete graph in TensorFlow
         """
-        # As explained [here](https://stackoverflow.com/a/36282423), you don't need to
-        # use with blocks if you only have one default graph and one default session:
-        # tf.reset_default_graph()
-        # self.graph = tf.Graph()
-        # with self.graph.as_default():
-
         # with tf.device(self.main_device):
         # Configure input and output tensors
         self.config_placeholders()

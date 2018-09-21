@@ -28,6 +28,7 @@ from logger import OptFlowTBLogger
 from multi_gpus import assign_to_device, average_gradients
 from core_warp import dense_image_warp
 from core_costvol import cost_volume
+from utils import tf_where
 
 _DEBUG_USE_REF_IMPL = False
 
@@ -149,6 +150,7 @@ _DEFAULT_PWCNET_VAL_OPTIONS = {
     'y_dtype': tf.float32,  # u,v flows output type
     'y_shape': [None, None, 2],  # u,v flows output shape [H, W, 2]
     'adapt_info': None,  # if predicted flows are padded by the model, crop them back by to this size
+    'sparse_gt_flow': False,  # if gt flows are sparse (KITTI), only compute average EPE where gt flows aren't (0., 0.)
     # Multi-GPU config
     # list devices on which to run the model's train ops (can be more than one GPU)
     'gpu_devices': ['/device:GPU:0', '/device:GPU:1'],
@@ -227,6 +229,7 @@ class ModelPWCNet(ModelBase):
         """
         super().__init__(name, mode, session, options)
         self.ds = dataset
+        # self.adapt_infos = []
 
     ###
     # Model mgmt
@@ -348,6 +351,16 @@ class ModelPWCNet(ModelBase):
             # In offline evaluation mode, we only care about the individual predictions and metrics:
             self.y_hat_val_tnsr = [self.flow_pred_tnsr, self.metric_op]
 
+            # if self.opts['sparse_gt_flow'] is True:
+            #     # Find the location of the zerod-out flows in the gt
+            #     zeros_loc = tf.logical_and(tf.equal(self.y_tnsr[:, :, :, 0], 0.0), tf.equal(self.y_tnsr[:, :, :, 1], 0.0))
+            #     zeros_loc = tf.expand_dims(zeros_loc, -1)
+            #
+            #     # Zero out flow predictions at the same location so we only compute the EPE at the sparse flow points
+            #     sparse_flow_pred_tnsr = tf_where(zeros_loc, tf.zeros_like(self.flow_pred_tnsr), self.flow_pred_tnsr)
+            #
+            #     self.y_hat_val_tnsr = [sparse_flow_pred_tnsr, self.metric_op]
+
         self.y_hat_test_tnsr = [self.flow_pred_tnsr, self.flow_pyr_tnsr]
 
     ###
@@ -425,6 +438,8 @@ class ModelPWCNet(ModelBase):
             padding = [(0, 0), (0, pad_h), (0, pad_w), (0, 0)]
             y_adapt_info = y_adapt.shape  # Save original shape
             y_adapt = np.pad(y_adapt, padding, mode='constant', constant_values=0.)
+
+        # if y_adapt_info is not None and not y_adapt_info in self.adapt_infos: self.adapt_infos.append(y_adapt_info)
 
         return y_adapt, y_adapt_info
 
@@ -778,6 +793,14 @@ class ModelPWCNet(ModelBase):
         if self.opts['adapt_info'] is not None:
             y_tnsr = y_tnsr[:, 0:self.opts['adapt_info'][1], 0:self.opts['adapt_info'][2], :]
             flow_pred_tnsr = flow_pred_tnsr[:, 0:self.opts['adapt_info'][1], 0:self.opts['adapt_info'][2], :]
+
+        if self.opts['sparse_gt_flow'] is True:
+            # Find the location of the zerod-out flows in the gt
+            zeros_loc = tf.logical_and(tf.equal(y_tnsr[:, :, :, 0], 0.0), tf.equal(y_tnsr[:, :, :, 1], 0.0))
+            zeros_loc = tf.expand_dims(zeros_loc, -1)
+
+            # Zero out flow predictions at the same location so we only compute the EPE at the sparse flow points
+            flow_pred_tnsr = tf_where(zeros_loc, tf.zeros_like(flow_pred_tnsr), flow_pred_tnsr)
 
         if self.mode in ['train_noval', 'train_with_val']:
             # In online evaluation mode, we only care about the average loss and metric for the batch:
