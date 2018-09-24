@@ -244,11 +244,20 @@ class ModelBase:
             self.config_loggers()
 
         elif self.mode in ['val', 'val_notrain']:
-            self.build_model()
-            self.setup_metrics_ops()
+            if self.opts['use_mixed_precision'] is True:
+                with tf.variable_scope('fp32_vars', custom_getter=float32_variable_storage_getter):
+                    self.build_model()
+                    self.setup_metrics_ops()
+            else:
+                self.build_model()
+                self.setup_metrics_ops()
 
         else:  # inference mode
-            self.build_model()
+            if self.opts['use_mixed_precision'] is True:
+                with tf.variable_scope('fp32_vars', custom_getter=float32_variable_storage_getter):
+                    self.build_model()
+            else:
+                self.build_model()
 
         # Set output tensors
         self.set_output_tnsrs()
@@ -335,17 +344,19 @@ class ModelBase:
             - How to count total number of trainable parameters in a tensorflow model?
             https://stackoverflow.com/questions/38160940/how-to-count-total-number-of-trainable-parameters-in-a-tensorflow-model
         """
-        print("\nModel Configuration:")
-        for k, v in self.opts.items():
-            if self.mode in ['train_noval', 'train_with_val']:
-                if self.opts['lr_policy'] == 'multisteps':
-                    if k in ['init_lr', 'cyclic_lr_max', 'cyclic_lr_base', 'cyclic_lr_stepsize']:
-                        continue
-                if self.opts['lr_policy'] == 'cyclic':
-                    if k in ['init_lr', 'lr_boundaries', 'lr_values']:
-                        continue
-            print(f"  {k:22} {v}")
-        print(f"  {'mode':22} {self.mode}")
-        if self.dbg:
-            self.summary()
-        print(f"  {'trainable params':22} {np.sum([np.prod(v.shape) for v in tf.trainable_variables()])}")
+        with self.graph.as_default():
+            print("\nModel Configuration:")
+            for k, v in self.opts.items():
+                if self.mode in ['train_noval', 'train_with_val']:
+                    if self.opts['lr_policy'] == 'multisteps':
+                        if k in ['init_lr', 'cyclic_lr_max', 'cyclic_lr_base', 'cyclic_lr_stepsize']:
+                            continue
+                    if self.opts['lr_policy'] == 'cyclic':
+                        if k in ['init_lr', 'lr_boundaries', 'lr_values']:
+                            continue
+                print(f"  {k:22} {v}")
+            print(f"  {'mode':22} {self.mode}")
+            # if self.mode in ['train_noval', 'train_with_val']:
+            if self.dbg:
+                self.summary()
+            print(f"  {'trainable params':22} {np.sum([np.prod(v.shape) for v in tf.trainable_variables()])}")

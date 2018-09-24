@@ -1,7 +1,7 @@
 """
 dataset_mpisintel.py
 
-MPI-Sintel optical flow dataset class.
+MPI-Sintel (436x1024) optical flow dataset class.
 
 Written by Phil Ferriere
 

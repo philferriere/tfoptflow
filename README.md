@@ -13,12 +13,15 @@ Finally, as shown in the ["Links to pre-trained models"](#links) section, we ach
 - [Background](#background)
 - [Environment Setup](#environment-setup)
 - [Links to pre-trained models](#links)
-- [PWC-Net](#pwc-net-)
-  1. [Basic Idea](#pwc-net-basic-idea)
-  1. [Network](#pwc-net-network)
-  1. [Jupyter Notebooks](#pwc-net-jupyter-notebooks)
-  1. [Training](#pwc-net-training)
-  1. [Evaluation](#pwc-net-eval)
+- [PWC-Net](#pwc-net)
+  + [Basic Idea](#pwc-net-basic-idea)
+  + [Network](#pwc-net-network)
+  + [Jupyter Notebooks](#pwc-net-jupyter-notebooks)
+  + [Training](#pwc-net-training)
+    * [Multisteps learning rate schedule](#pwc-net-training-multisteps)
+    * [Cyclic learning rate schedule](#pwc-net-training-cyclic)
+    * [Mixed-precision training](#pwc-net-training-mixed-precision)
+  + [Evaluation](#pwc-net-eval)
 - [Datasets](#datasets)
 - [References](#references)
 - [Acknowledgments](#acknowledgments)
@@ -50,7 +53,7 @@ Pre-trained models can be found [here](http://bit.ly/tfoptflow). They come in tw
 
 Please note that we trained these models using slightly different dataset and learning rate schedules. The official multistep schedule discussed in [[2018a]](#2018a) is as follows: S<sub>long</sub> 1.2M iters training, batch size 8 + S<sub>fine</sub> 500k iters finetuning, batch size 4). Ours is S<sub>long</sub> only, 1.2M iters, batch size 8, on a mix of `FlyingChairs` and `FlyingThings3DHalfRes`. `FlyingThings3DHalfRes` is our own version of `FlyingThings3` where every input image pair and groundtruth flow has been **downsampled by two** in each dimension. We also use a **different set of augmentation techniques**.
 
-| Model name | Noteboks | FlyingChairs AEPE | Sintel clean AEPE | Sintel final AEPE |
+| Model name | Notebooks | FlyingChairs (384x512) AEPE | Sintel clean (436x1024) AEPE | Sintel final (436x1024) AEPE |
 | :---: | :---: | :---: | :---: | :---: |
 | `pwcnet-lg-6-2-multisteps-chairsthingsmix` | [train](tfoptflow/pwcnet_train_lg-6-2-multisteps-chairsthingsmix.ipynb) | 1.44 ([notebook](tfoptflow/pwcnet_eval_lg-6-2-multisteps-chairsthingsmix_flyingchairs.ipynb)) | 2.60 ([notebook](tfoptflow/pwcnet_eval_lg-6-2-multisteps-chairsthingsmix_mpisintelclean.ipynb)) | 3.70 ([notebook](tfoptflow/pwcnet_eval_lg-6-2-multisteps-chairsthingsmix_mpisintelfinal.ipynb)) |
 | `pwcnet-sm-6-2-multisteps-chairsthingsmix` | coming soon | coming soon | coming soon | coming soon |
@@ -58,14 +61,6 @@ Please note that we trained these models using slightly different dataset and le
 As a reference, here are the official, reported results:
 
 ![](img/pwc-net-results.png)
-
-
-If you don't want to use the long training schedule, but still would like to play with this code, try our very short **cyclic learning rate schedule** (100k iters, batch size 8). The results are nowhere near as good, but they allow **for quick experimentation**:
-
-| Model name | Noteboks | FlyingChairs AEPE | Sintel clean AEPE | Sintel final AEPE |
-| :---: | :---:| :---: | :---: | :---: |
-| `pwcnet-lg-6-2-cyclic-chairsthingsmix` | [train](tfoptflow/pwcnet_train_lg-6-2-cyclic-chairsthingsmix.ipynb) | 2.67 ([notebook](tfoptflow/pwcnet_eval_lg-6-2-cyclic-chairsthingsmix_flyingchairs.ipynb)) | 3.99 ([notebook](tfoptflow/pwcnet_eval_lg-6-2-cyclic-chairsthingsmix_mpisintelclean.ipynb)) | 5.08 ([notebook](tfoptflow/pwcnet_eval_lg-6-2-cyclic-chairsthingsmix_mpisintelfinal.ipynb)) |
-| `pwcnet-sm-6-2-cyclic-chairsthingsmix` | [train](tfoptflow/pwcnet_train_sm-6-2-cyclic-chairsthingsmix.ipynb) | 2.79 ([notebook](tfoptflow/pwcnet_eval_sm-6-2-cyclic-chairsthingsmix_flyingchairs.ipynb)) | 4.34 ([notebook](tfoptflow/pwcnet_eval_sm-6-2-cyclic-chairsthingsmix_mpisintelclean.ipynb)) | 5.3 ([notebook](tfoptflow/pwcnet_eval_sm-6-2-cyclic-chairsthingsmix_mpisintelfinal.ipynb))|
 
 We also measured the following MPI-Sintel (436 x 1024) inference times on a few GPUs:
 
@@ -75,7 +70,7 @@ We also measured the following MPI-Sintel (436 x 1024) inference times on a few 
 | `pwcnet-sm-6-2-cyclic-chairsthingsmix` | 68.5ms | 64.4ms | 53.8ms |
 
 
-# PWC-Net
+# PWC-Net <a name="pwc-net"></a>
 
 ## Basic Idea <a name="pwc-net-basic-idea"></a>
 
@@ -132,6 +127,9 @@ The recommended way to test this implementation is to use the following Jupyter 
 
 ## Training <a name="pwc-net-training"></a>
 
+
+### Multisteps learning rate schedule <a name="pwc-net-training-multisteps"></a>
+
 Differently from the original paper, we do not train on `FlyingChairs` and `FlyingThings3D` sequentially (i.e, pre-train on `FlyingChairs` then finetune on `FlyingThings3D`). This is because the average flow magnitude on the `MPI-Sintel` dataset is only 13.5, while the average flow magnitudes on `FlyingChairs` and `FlyingThings3D` are 11.1 and 38, respectively. In our experiments, finetuning on `FlyingThings3D` would only yield worse results on `MPI-Sintel`.
 
 We got more stable results by using a half-resolution version of the `FlyingThings3D` dataset with an average flow magnitude of 19, much closer to `FlyingChairs` and `MPI-Sintel` in that respect. We then trained on a mix of the `FlyingChairs` and `FlyingThings3DHalfRes` datasets. This mix, of course, could be extended with additional datasets.
@@ -142,17 +140,34 @@ Here are the training curves for the S<sub>long</sub> training notebooks listed 
 ![](img/epe_multisteps.png)
 ![](img/lr_multisteps.png)
 
-And, below are the training curves for the Cyclic<sub>short</sub> training notebooks:
-
-![](img/loss_cyclic.png)
-![](img/epe_cyclic.png)
-![](img/lr_cyclic.png)
-
 Note that, if you click on the `IMAGE` tab in Tensorboard while running the training notebooks above, you will be able to visualize the progress of the training on a few validation samples (including the levels of the feature pyramids), as demonstrated here:
 
 ![](img/val2.png)
 ![](img/val4.png)
 
+### Cyclic learning rate schedule <a name="pwc-net-training-cyclic"></a>
+
+If you don't want to use the long training schedule, but still would like to play with this code, try our very short **cyclic learning rate schedule** (100k iters, batch size 8). The results are nowhere near as good, but they allow **for quick experimentation**:
+
+| Model name | Notebooks | FlyingChairs (384x512) AEPE | Sintel clean (436x1024) AEPE | Sintel final (436x1024) AEPE |
+| :---: | :---:| :---: | :---: | :---: |
+| `pwcnet-lg-6-2-cyclic-chairsthingsmix` | [train](tfoptflow/pwcnet_train_lg-6-2-cyclic-chairsthingsmix.ipynb) | 2.67 ([notebook](tfoptflow/pwcnet_eval_lg-6-2-cyclic-chairsthingsmix_flyingchairs.ipynb)) | 3.99 ([notebook](tfoptflow/pwcnet_eval_lg-6-2-cyclic-chairsthingsmix_mpisintelclean.ipynb)) | 5.08 ([notebook](tfoptflow/pwcnet_eval_lg-6-2-cyclic-chairsthingsmix_mpisintelfinal.ipynb)) |
+| `pwcnet-sm-6-2-cyclic-chairsthingsmix` | [train](tfoptflow/pwcnet_train_sm-6-2-cyclic-chairsthingsmix.ipynb) | 2.79 ([notebook](tfoptflow/pwcnet_eval_sm-6-2-cyclic-chairsthingsmix_flyingchairs.ipynb)) | 4.34 ([notebook](tfoptflow/pwcnet_eval_sm-6-2-cyclic-chairsthingsmix_mpisintelclean.ipynb)) | 5.3 ([notebook](tfoptflow/pwcnet_eval_sm-6-2-cyclic-chairsthingsmix_mpisintelfinal.ipynb))|
+
+Below are the training curves for the Cyclic<sub>short</sub> training notebooks:
+
+![](img/loss_cyclic.png)
+![](img/epe_cyclic.png)
+![](img/lr_cyclic.png)
+
+### Mixed-precision training <a name="pwc-net-training-mixed-precision"></a>
+
+You can speed up training even further by using **mixed-precision** training. But, again, don't expect the same level of accuracy:
+
+| Model name | Notebooks | FlyingChairs (384x512) AEPE | Sintel clean (436x1024) AEPE | Sintel final (436x1024) AEPE |
+| :---: | :---:| :---: | :---: | :---: |
+| `pwcnet-sm-6-2-cyclic-chairsthingsmix-fp16` | [train](tfoptflow/pwcnet_train_sm-6-2-cyclic-chairsthingsmix-fp16.ipynb) | 3.14 ([notebook](tfoptflow/pwcnet_eval_sm-6-2-cyclic-chairsthingsmix-fp16.ipynb)) | 5.15 ([notebook](pwcnet_eval_sm-6-2-cyclic-chairsthingsmix-fp16.ipynb)) | 6.10 ([notebook](pwcnet_eval_sm-6-2-cyclic-chairsthingsmix-fp16.ipynb))|
+ 
 ## Evaluation <a name="pwc-net-eval"></a>
 
 As shown in the evaluation notebooks, and as expected, it becomes harder for the PWC-Net models to deliver accurate flow predictions if the average flow magnitude from one frame to the next is high:

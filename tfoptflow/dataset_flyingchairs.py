@@ -1,7 +1,7 @@
 """
 dataset_flyingchairs.py
 
-FlyingChairs optical flow dataset class.
+FlyingChairs (384x512) optical flow dataset class.
 
 Written by Phil Ferriere
 

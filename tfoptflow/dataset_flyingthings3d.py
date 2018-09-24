@@ -1,7 +1,7 @@
 """
 dataset_flyingthings3d.py
 
-FlyingChairs optical flow dataset class.
+FlyingThnigs3D (540x960) and FlyingThinbs3DHalfRes (270x480) optical flow dataset class.
 
 Written by Phil Ferriere
 

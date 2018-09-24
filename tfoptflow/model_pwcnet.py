@@ -235,6 +235,7 @@ class ModelPWCNet(ModelBase):
         super().__init__(name, mode, session, options)
         self.ds = dataset
         # self.adapt_infos = []
+        # self.unique_y_shapes = []
 
     ###
     # Model mgmt
@@ -445,6 +446,7 @@ class ModelPWCNet(ModelBase):
             y_adapt = np.pad(y_adapt, padding, mode='constant', constant_values=0.)
 
         # if y_adapt_info is not None and not y_adapt_info in self.adapt_infos: self.adapt_infos.append(y_adapt_info)
+        # if not y.shape in self.unique_y_shapes: self.unique_y_shapes.append(y.shape)
 
         return y_adapt, y_adapt_info
 
@@ -883,6 +885,7 @@ class ModelPWCNet(ModelBase):
             # Compute stats
             avg_metric, avg_duration = df.loc[:, metric_name].mean(), df.loc[:, 'Duration'].mean()
 
+        # print(self.unique_y_shapes)
         return avg_metric, avg_duration, df
 
     ###
