@@ -1,4 +1,4 @@
-# Optical Flow Estimation with Tensorflow
+# Optical Flow Prediction with Tensorflow
 
 This repo provides a TensorFlow-based implementation of the wonderful paper "PWC-Net: CNNs for Optical Flow Using Pyramid, Warping, and Cost Volume," by Deqing Sun et al. (CVPR 2018).
 
