@@ -166,7 +166,7 @@ You can speed up training even further by using **mixed-precision** training. Bu
 
 | Model name | Notebooks | FlyingChairs (384x512) AEPE | Sintel clean (436x1024) AEPE | Sintel final (436x1024) AEPE |
 | :---: | :---:| :---: | :---: | :---: |
-| `pwcnet-sm-6-2-cyclic-chairsthingsmix-fp16` | [train](tfoptflow/pwcnet_train_sm-6-2-cyclic-chairsthingsmix-fp16.ipynb) | 3.14 ([notebook](tfoptflow/pwcnet_eval_sm-6-2-cyclic-chairsthingsmix-fp16.ipynb)) | 5.15 ([notebook](pwcnet_eval_sm-6-2-cyclic-chairsthingsmix-fp16.ipynb)) | 6.10 ([notebook](pwcnet_eval_sm-6-2-cyclic-chairsthingsmix-fp16.ipynb))|
+| `pwcnet-sm-6-2-cyclic-chairsthingsmix-fp16` | [train](tfoptflow/pwcnet_train_sm-6-2-cyclic-chairsthingsmix-fp16.ipynb) | 2.47 ([notebook](tfoptflow/pwcnet_eval_sm-6-2-cyclic-chairsthingsmix-fp16.ipynb)) | 3.77 ([notebook](pwcnet_eval_sm-6-2-cyclic-chairsthingsmix-fp16.ipynb)) | 4.90 ([notebook](pwcnet_eval_sm-6-2-cyclic-chairsthingsmix-fp16.ipynb))|
  
 ## Evaluation <a name="pwc-net-eval"></a>
 
