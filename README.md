@@ -49,14 +49,14 @@ The code in this repo was developed and tested using Anaconda3 v.5.2.0. To repro
 
 # Links to pre-trained models <a name="links"></a>
 
-Pre-trained models can be found [here](http://bit.ly/tfoptflow). They come in two flavors: "small" (`sm`) models don't use dense connections or residual connections, "large" (`lg`) models do. They are all built with a 6-level pyramid, upsampling level 2 by 4 in each dimension to generate the final prediction, and construct an 81-channel cost volume at each level from a search range (maximum displacement) of 4.
+Pre-trained models can be found [here](http://bit.ly/tfoptflow). They come in two flavors: "small" (`sm`, with 4,705,064 learned parameters) models don't use dense connections or residual connections, "large" (`lg`, with 14,079,050 learned parameters) models do. They are all built with a 6-level pyramid, upsampling level 2 by 4 in each dimension to generate the final prediction, and construct an 81-channel cost volume at each level from a search range (maximum displacement) of 4.
 
 Please note that we trained these models using slightly different dataset and learning rate schedules. The official multistep schedule discussed in [[2018a]](#2018a) is as follows: S<sub>long</sub> 1.2M iters training, batch size 8 + S<sub>fine</sub> 500k iters finetuning, batch size 4). Ours is S<sub>long</sub> only, 1.2M iters, batch size 8, on a mix of `FlyingChairs` and `FlyingThings3DHalfRes`. `FlyingThings3DHalfRes` is our own version of `FlyingThings3` where every input image pair and groundtruth flow has been **downsampled by two** in each dimension. We also use a **different set of augmentation techniques**.
 
 | Model name | Notebooks | FlyingChairs (384x512) AEPE | Sintel clean (436x1024) AEPE | Sintel final (436x1024) AEPE |
 | :---: | :---: | :---: | :---: | :---: |
 | `pwcnet-lg-6-2-multisteps-chairsthingsmix` | [train](tfoptflow/pwcnet_train_lg-6-2-multisteps-chairsthingsmix.ipynb) | 1.44 ([notebook](tfoptflow/pwcnet_eval_lg-6-2-multisteps-chairsthingsmix_flyingchairs.ipynb)) | 2.60 ([notebook](tfoptflow/pwcnet_eval_lg-6-2-multisteps-chairsthingsmix_mpisintelclean.ipynb)) | 3.70 ([notebook](tfoptflow/pwcnet_eval_lg-6-2-multisteps-chairsthingsmix_mpisintelfinal.ipynb)) |
-| `pwcnet-sm-6-2-multisteps-chairsthingsmix` | coming soon | coming soon | coming soon | coming soon |
+| `pwcnet-sm-6-2-multisteps-chairsthingsmix` | [train](tfoptflow/pwcnet_train_sm-6-2-multisteps-chairsthingsmix.ipynb) | 1.72 ([notebook](tfoptflow/pwcnet_eval_sm-6-2-multisteps-chairsthingsmix_flyingchairs.ipynb)) | 2.93 ([notebook](tfoptflow/pwcnet_eval_sm-6-2-multisteps-chairsthingsmix_mpisintelclean.ipynb)) | 3.89 ([notebook](tfoptflow/pwcnet_eval_sm-6-2-multisteps-chairsthingsmix_mpisintelfinal.ipynb)) |
 
 As a reference, here are the official, reported results:
 
@@ -140,7 +140,7 @@ Here are the training curves for the S<sub>long</sub> training notebooks listed 
 ![](img/epe_multisteps.png)
 ![](img/lr_multisteps.png)
 
-Note that, if you click on the `IMAGE` tab in Tensorboard while running the training notebooks above, you will be able to visualize the progress of the training on a few validation samples (including the levels of the feature pyramids), as demonstrated here:
+Note that, if you click on the `IMAGE` tab in Tensorboard while running the training notebooks above, you will be able to visualize the progress of the training on a few validation samples (including the predicted flows at each pyramid level), as demonstrated here:
 
 ![](img/val2.png)
 ![](img/val4.png)
