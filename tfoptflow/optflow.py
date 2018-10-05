@@ -82,6 +82,10 @@ def flow_read(src_file):
         https://github.com/liruoteng/OpticalFlowToolkit/blob/master/lib/pfm.py
         Written by Ruoteng Li, Copyright (c) 2017 Ruoteng Li
         License Unknown
+        - To read optical flow data from FLO file:
+        https://github.com/daigo0927/PWC-Net_tf/blob/master/flow_utils.py
+        Written by Daigo Hirooka, Copyright (c) 2018 Daigo Hirooka
+        MIT License
     """
     # Read in the entire file, if it exists
     assert(os.path.exists(src_file))

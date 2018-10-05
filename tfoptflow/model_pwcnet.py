@@ -6,10 +6,6 @@ PWC-Net model class.
 Written by Phil Ferriere
 
 Licensed under the MIT License (see LICENSE for details)
-
-Based on:
-    - https://github.com/daigo0927/PWC-Net_tf/blob/master/train.py
-        Copyright (C) 2018 Daigo Hirooka
 """
 
 from __future__ import absolute_import, division, print_function
@@ -466,16 +462,16 @@ class ModelPWCNet(ModelBase):
         if adapt_info is not None:
             pred_flows = pred_flows[:, 0:adapt_info[1], 0:adapt_info[2], :]
 
-        # Individuate levels of the pyramids (at this point, they are still batched)
+        # Individuate flows of the flow pyramid (at this point, they are still batched)
         pyramids = y_hat[1]
-        pred_flow_pyramids = []
+        pred_flows_pyramid = []
         for idx in range(len(pred_flows)):
             pyramid = []
             for lvl in range(self.opts['pyr_lvls'] - self.opts['flow_pred_lvl'] + 1):
                 pyramid.append(pyramids[lvl][idx])
-            pred_flow_pyramids.append(pyramid)
+            pred_flows_pyramid.append(pyramid)
 
-        return pred_flows, pred_flow_pyramids
+        return pred_flows, pred_flows_pyramid
 
     def postproc_y_hat_train(self, y_hat, adapt_info=None):
         """Postprocess the results coming from the network during training.
@@ -736,17 +732,17 @@ class ModelPWCNet(ModelBase):
                         # Run the test samples through the network
                         feed_dict = {self.x_tnsr: x_tb_test_adapt}
                         y_hat = self.sess.run(self.y_hat_test_tnsr, feed_dict=feed_dict)
-                        pred_flows, pred_flow_pyrs = self.postproc_y_hat_test(y_hat)
+                        pred_flows, pred_flows_pyr = self.postproc_y_hat_test(y_hat)
 
                         # Only show batch_size results, no matter what the GPU count is
-                        pred_flows, pred_flow_pyrs = pred_flows[0:batch_size], pred_flow_pyrs[0:batch_size]
+                        pred_flows, pred_flows_pyr = pred_flows[0:batch_size], pred_flows_pyr[0:batch_size]
 
                         # Send the results to tensorboard
                         if self.opts['tb_test_imgs'] == 'top_flow':
                             self.tb_test.log_imgs_w_flows('test/{}_flows', x_tb_test, None, 0, pred_flows,
                                                           None, step, IDs_tb_test)
                         else:
-                            self.tb_test.log_imgs_w_flows('test/{}_flow_pyrs', x_tb_test, pred_flow_pyrs,
+                            self.tb_test.log_imgs_w_flows('test/{}_flows_pyr', x_tb_test, pred_flows_pyr,
                                                           self.opts['pyr_lvls'] - self.opts['flow_pred_lvl'], pred_flows,
                                                           None, step, IDs_tb_test)
 
@@ -763,19 +759,19 @@ class ModelPWCNet(ModelBase):
                         # Run the val samples through the network (top flow and pyramid)
                         feed_dict = {self.x_tnsr: x_tb_val_adapt}
                         y_hat = self.sess.run(self.y_hat_test_tnsr, feed_dict=feed_dict)
-                        pred_flows, pred_flow_pyrs = self.postproc_y_hat_test(y_hat)
+                        pred_flows, pred_flows_pyr = self.postproc_y_hat_test(y_hat)
 
                         # Only show batch_size results, no matter what the GPU count is
                         x_tb_val, y_tb_val = x_tb_val[0:batch_size], y_tb_val[0:batch_size]
                         IDs_tb_val = IDs_tb_val[0:batch_size]
-                        pred_flows, pred_flow_pyrs = pred_flows[0:batch_size], pred_flow_pyrs[0:batch_size]
+                        pred_flows, pred_flows_pyr = pred_flows[0:batch_size], pred_flows_pyr[0:batch_size]
 
                         # Send the results to tensorboard
                         if self.opts['tb_val_imgs'] == 'top_flow':
                             self.tb_val.log_imgs_w_flows('val/{}_flows', x_tb_val, None, 0, pred_flows,
                                                          y_tb_val, step, IDs_tb_val)
                         else:
-                            self.tb_val.log_imgs_w_flows('val/{}_flow_pyrs', x_tb_val[0:batch_size], pred_flow_pyrs,
+                            self.tb_val.log_imgs_w_flows('val/{}_flows_pyr', x_tb_val[0:batch_size], pred_flows_pyr,
                                                          self.opts['pyr_lvls'] - self.opts['flow_pred_lvl'], pred_flows,
                                                          y_tb_val, step, IDs_tb_val)
 
@@ -830,10 +826,10 @@ class ModelPWCNet(ModelBase):
             batch_size = self.opts['batch_size']
             if self.opts['use_tf_data'] is True:
                 # Create tf.data.Dataset manager
-                val_tf_ds = self.ds.get_tf_ds(batch_size=batch_size, split='val', sess=self.sess)
+                tf_ds = self.ds.get_tf_ds(batch_size=batch_size, split='val', sess=self.sess)
 
                 # Ops for initializing the iterator
-                val_next_batch = val_tf_ds.make_one_shot_iterator().get_next()
+                next_batch = tf_ds.make_one_shot_iterator().get_next()
 
             # Store results in a dataframe
             if metric_name is None:
@@ -852,11 +848,11 @@ class ModelPWCNet(ModelBase):
 
                 # Fetch and adapt sample
                 if self.opts['use_tf_data'] is True:
-                    x, y, y_hat_paths, IDs = self.sess.run(val_next_batch)
+                    x, y, y_hat_paths, IDs = self.sess.run(next_batch)
                     y_hat_paths = [y_hat_path.decode() for y_hat_path in y_hat_paths]
                     IDs = [ID.decode() for ID in IDs]
                 else:
-                    # Get a batch of val samples and make them conform to the network's requirements
+                    # Get a batch of samples and make them conform to the network's requirements
                     x, y, y_hat_paths, IDs = self.ds.next_batch(batch_size, split='val_with_pred_paths')
                     # x: [batch_size * self.num_gpus,2,H,W,3] uint8 y: [batch_size,H,W,2] float32
 
@@ -864,7 +860,7 @@ class ModelPWCNet(ModelBase):
                 y_adapt, y_adapt_info = self.adapt_y(y)
                 # x_adapt: [batch_size * self.num_gpus,2,H,W,3] float32 y_adapt: [batch_size,H,W,2] float32
 
-                # Run the val sample through the network (metric op)
+                # Run the sample through the network (metric op)
                 feed_dict = {self.x_tnsr: x_adapt, self.y_tnsr: y_adapt}
                 start_time = time.time()
                 y_hat = self.sess.run(self.y_hat_val_tnsr, feed_dict=feed_dict)
@@ -887,6 +883,128 @@ class ModelPWCNet(ModelBase):
 
         # print(self.unique_y_shapes)
         return avg_metric, avg_duration, df
+
+    ###
+    # Inference helpers
+    ###
+    def predict(self, return_preds=False, save_preds=True):
+        """Inference loop. Run the trained model on the test split of the dataset.
+        The data samples are provided by the OpticalFlowDataset object associated with this ModelPWCNet instance.
+        To predict flows for image pairs not provided by such object, use predict_from_img_pairs() instead.
+        Args:
+            return_preds: if True, the predictions are returned to the caller in list([2, H, W, 3]) format.
+            save_preds: if True, the predictions are saved to disk in .flo and .png format
+        Returns:
+            if return_preds is True, the predictions and their IDs are returned (might require a lot of RAM...)
+            if return_preds is False, return None
+        """
+        with self.graph.as_default():
+            # Use feed_dict from np or with tf.data.Dataset?
+            batch_size = self.opts['batch_size']
+            if self.opts['use_tf_data'] is True:
+                # Create tf.data.Dataset manager
+                tf_ds = self.ds.get_tf_ds(batch_size=batch_size, split='test', sess=self.sess)
+
+                # Ops for initializing the iterator
+                next_batch = tf_ds.make_one_shot_iterator().get_next()
+
+            # Chunk dataset
+            rounds, rounds_left = divmod(self.ds.tst_size, batch_size)
+            if rounds_left:
+                rounds += 1
+
+            # Loop through input samples and run inference on them
+            if return_preds is True:
+                preds, ids = [], []
+            desc = f'Predicting flows and saving preds' if save_preds else f'Predicting flows'
+            for _round in trange(rounds, ascii=True, ncols=100, desc=desc):
+
+                # Fetch and adapt sample
+                if self.opts['use_tf_data'] is True:
+                    x, y_hat_paths, IDs = self.sess.run(next_batch)
+                    y_hat_paths = [y_hat_path.decode() for y_hat_path in y_hat_paths]
+                    IDs = [ID.decode() for ID in IDs]
+                else:
+                    # Get a batch of samples and make them conform to the network's requirements
+                    x, y_hat_paths, IDs = self.ds.next_batch(batch_size, split='test_with_pred_paths')
+                    # x: [batch_size,2,H,W,3] uint8; x_adapt: [batch_size,2,H,W,3] float32
+
+                x_adapt, x_adapt_info = self.adapt_x(x)
+                if x_adapt_info is not None:
+                    y_adapt_info = (x_adapt_info[0], x_adapt_info[2], x_adapt_info[3], 2)
+                else:
+                    y_adapt_info = None
+
+                # Run the sample through the network
+                feed_dict = {self.x_tnsr: x_adapt}
+                y_hat = self.sess.run(self.y_hat_test_tnsr, feed_dict=feed_dict)
+                y_hats, _ = self.postproc_y_hat_test(y_hat, y_adapt_info)
+
+                # Save the predicted flows to disk, if requested
+                for y_hat, y_hat_path, ID in zip(y_hats, y_hat_paths, IDs):
+                    if return_preds is True:
+                        preds.append(y_hat)
+                        ids.append(ID)
+                    if save_preds is True:
+                        flow_write(y_hat, y_hat_path)
+                        flow_write_as_png(y_hat, y_hat_path.replace('.flo', '.png'))
+
+        if return_preds is True:
+            return preds[0:self.ds.tst_size], ids[0:self.ds.tst_size]
+        else:
+            return None
+
+    def predict_from_img_pairs(self, img_pairs, batch_size=1, verbose=False):
+        """Inference loop. Run inference on a list of image pairs.
+        Args:
+            img_pairs: list of image pairs/tuples in list((img_1, img_2),...,(img_n, img_nplusone)) format.
+            batch_size: size of the batch to process (all images must have the same dimension, if batch_size>1)
+            verbose: if True, show progress bar
+        Returns:
+            Predicted flows in list format
+        """
+        with self.graph.as_default():
+            # Chunk image pair list
+            batch_size = self.opts['batch_size']
+            test_size = len(img_pairs)
+            rounds, rounds_left = divmod(test_size, batch_size)
+            if rounds_left:
+                rounds += 1
+
+            # Loop through input samples and run inference on them
+            preds, test_ptr = [], 0
+            rng = trange(rounds, ascii=True, ncols=100, desc='Predicting flows') if verbose else range(rounds)
+            for _round in rng:
+                # In batch mode, make sure to wrap around if there aren't enough input samples to process
+                if test_ptr + batch_size < test_size:
+                    new_ptr = test_ptr + batch_size
+                    indices = list(range(test_ptr, test_ptr + batch_size))
+                else:
+                    new_ptr = (test_ptr + batch_size) % test_size
+                    indices = list(range(test_ptr, test_size)) + list(range(0, new_ptr))
+                test_ptr = new_ptr
+
+                # Repackage input image pairs as np.ndarray
+                x = np.array([img_pairs[idx] for idx in indices])
+
+                # Make input samples conform to the network's requirements
+                # x: [batch_size,2,H,W,3] uint8; x_adapt: [batch_size,2,H,W,3] float32
+                x_adapt, x_adapt_info = self.adapt_x(x)
+                if x_adapt_info is not None:
+                    y_adapt_info = (x_adapt_info[0], x_adapt_info[2], x_adapt_info[3], 2)
+                else:
+                    y_adapt_info = None
+
+                # Run the adapted samples through the network
+                feed_dict = {self.x_tnsr: x_adapt}
+                y_hat = self.sess.run(self.y_hat_test_tnsr, feed_dict=feed_dict)
+                y_hats, _ = self.postproc_y_hat_test(y_hat, y_adapt_info)
+
+                # Return flat list of predicted labels
+                for y_hat in y_hats:
+                    preds.append(y_hat)
+
+        return preds[0:test_size]
 
     ###
     # PWC-Net pyramid helpers
@@ -1417,6 +1535,10 @@ class ModelPWCNet(ModelBase):
             need to scale the upsampled flow at each pyramid level for the warping layer. For example, at the second
             level, we scale the upsampled flow from the third level by a factor of 5 (=20/4) before warping features
             of the second image.
+        Based on:
+            - https://github.com/daigo0927/PWC-Net_tf/blob/master/model.py
+            Written by Daigo Hirooka, Copyright (c) 2018 Daigo Hirooka
+            MIT License
         """
         with tf.variable_scope(name):
 

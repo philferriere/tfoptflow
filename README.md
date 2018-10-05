@@ -22,6 +22,9 @@ Finally, as shown in the ["Links to pre-trained models"](#links) section, we ach
     * [Cyclic learning rate schedule](#pwc-net-training-cyclic)
     * [Mixed-precision training](#pwc-net-training-mixed-precision)
   + [Evaluation](#pwc-net-eval)
+  + [Inference](#pwc-net-predict)
+    * [Running inference on the test split of a dataset](#pwc-net-predict-dataset)
+    * [Running inference on image pairs](#pwc-net-predict-img-pairs)
 - [Datasets](#datasets)
 - [References](#references)
 - [Acknowledgments](#acknowledgments)
@@ -56,7 +59,7 @@ Please note that we trained these models using slightly different dataset and le
 | Model name | Notebooks | FlyingChairs (384x512) AEPE | Sintel clean (436x1024) AEPE | Sintel final (436x1024) AEPE |
 | :---: | :---: | :---: | :---: | :---: |
 | `pwcnet-lg-6-2-multisteps-chairsthingsmix` | [train](tfoptflow/pwcnet_train_lg-6-2-multisteps-chairsthingsmix.ipynb) | 1.44 ([notebook](tfoptflow/pwcnet_eval_lg-6-2-multisteps-chairsthingsmix_flyingchairs.ipynb)) | 2.60 ([notebook](tfoptflow/pwcnet_eval_lg-6-2-multisteps-chairsthingsmix_mpisintelclean.ipynb)) | 3.70 ([notebook](tfoptflow/pwcnet_eval_lg-6-2-multisteps-chairsthingsmix_mpisintelfinal.ipynb)) |
-| `pwcnet-sm-6-2-multisteps-chairsthingsmix` | [train](tfoptflow/pwcnet_train_sm-6-2-multisteps-chairsthingsmix.ipynb) | 1.72 ([notebook](tfoptflow/pwcnet_eval_sm-6-2-multisteps-chairsthingsmix_flyingchairs.ipynb)) | 2.93 ([notebook](tfoptflow/pwcnet_eval_sm-6-2-multisteps-chairsthingsmix_mpisintelclean.ipynb)) | 3.89 ([notebook](tfoptflow/pwcnet_eval_sm-6-2-multisteps-chairsthingsmix_mpisintelfinal.ipynb)) |
+| `pwcnet-sm-6-2-multisteps-chairsthingsmix` | [train](tfoptflow/pwcnet_train_sm-6-2-multisteps-chairsthingsmix.ipynb) | 1.71 ([notebook](tfoptflow/pwcnet_eval_sm-6-2-multisteps-chairsthingsmix_flyingchairs.ipynb)) | 2.96 ([notebook](tfoptflow/pwcnet_eval_sm-6-2-multisteps-chairsthingsmix_mpisintelclean.ipynb)) | 3.83 ([notebook](tfoptflow/pwcnet_eval_sm-6-2-multisteps-chairsthingsmix_mpisintelfinal.ipynb)) |
 
 As a reference, here are the official, reported results:
 
@@ -181,6 +184,80 @@ It is especially hard for this -- and any other 2-frame based motion estimator! 
 Still, when the average motion is moderate, both the small and large models generate remarkable results:
 
 ![](img/error_analysis_10_best.png)
+
+## Inference <a name="pwc-net-predict"></a>
+
+There are two ways you can call the code provided here to generate flow predictions for your own dataset:
+
+- Pass a list of image pairs to a `ModelPWCNet` object using its  `predict_from_img_pairs()` method
+- Pass an `OpticalFlowDataset` object to a `ModelPWCNet` object and call its  `predict()` method
+
+### Running inference on image pairs <a name="pwc-net-predict-img-pairs"></a>
+
+If you want to use a pre-trained PWC-Net model on your own set of images, you can pass a list of image pairs to a `ModelPWCNet` object using its  `predict_from_img_pairs()` method, as demonstrated here:
+
+```python
+from __future__ import absolute_import, division, print_function
+from copy import deepcopy
+from skimage.io import imread
+from model_pwcnet import ModelPWCNet, _DEFAULT_PWCNET_TEST_OPTIONS
+from visualize import display_img_pairs_w_flows
+
+# Build a list of image pairs to process
+img_pairs = []
+for pair in range(1, 4):
+    image_path1 = f'./samples/mpisintel_test_clean_ambush_1_frame_00{pair:02d}.png'
+    image_path2 = f'./samples/mpisintel_test_clean_ambush_1_frame_00{pair+1:02d}.png'
+    image1, image2 = imread(image_path1), imread(image_path2)
+    img_pairs.append((image1, image2))
+
+# TODO: Set device to use for inference
+# Here, we're using a GPU (use '/device:CPU:0' to run inference on the CPU)
+gpu_devices = ['/device:GPU:0']  
+controller = '/device:GPU:0'
+
+# TODO: Set the path to the trained model (make sure you've downloaded it first from http://bit.ly/tfoptflow)
+ckpt_path = './models/pwcnet-lg-6-2-multisteps-chairsthingsmix/pwcnet.ckpt-595000'
+
+# Configure the model for inference, starting with the default options
+nn_opts = deepcopy(_DEFAULT_PWCNET_TEST_OPTIONS)
+nn_opts['verbose'] = True
+nn_opts['ckpt_path'] = ckpt_path
+nn_opts['batch_size'] = 1
+nn_opts['gpu_devices'] = gpu_devices
+nn_opts['controller'] = controller
+
+# We're running the PWC-Net-large model in quarter-resolution mode
+# That is, with a 6 level pyramid, and upsampling of level 2 by 4 in each dimension as the final flow prediction
+nn_opts['use_dense_cx'] = True
+nn_opts['use_res_cx'] = True
+nn_opts['pyr_lvls'] = 6
+nn_opts['flow_pred_lvl'] = 2
+
+# The size of the images in this dataset are not multiples of 64, while the model generates flows padded to multiples
+# of 64. Hence, we need to crop the predicted flows to their original size
+nn_opts['adapt_info'] = (1, 436, 1024, 2)
+
+# Instantiate the model in inference mode and display the model configuration
+nn = ModelPWCNet(mode='test', options=nn_opts)
+nn.print_config()
+
+# Generate the predictions and display them
+pred_labels = nn.predict_from_img_pairs(img_pairs, batch_size=1, verbose=False)
+display_img_pairs_w_flows(img_pairs, pred_labels)
+```
+
+The code above can be found in the [`pwcnet_predict_from_img_pairs.ipynb`](tfoptflow/pwcnet_predict_from_img_pairs.ipynb) notebook and the  [`pwcnet_predict_from_img_pairs.py`](tfoptflow/pwcnet_predict_from_img_pairs.py) script.
+
+### Running inference on the test split of a dataset <a name="pwc-net-predict-dataset"></a>
+
+If you want to train a PWC-Net model from scratch, or finetune a pre-trained PWC-Net model using your own dataset, you will need to **implement a dataset handler** that derives from the `OpticalFlowDataset` base class in [`dataset_base.py`](tfoptflow/dataset_base.py).
+
+We provide several dataset handlers for well known datasets, such as MPI-Sintel ([`dataset_mpisintel.py`](tfoptflow/dataset_mpisintel.py)), FlyingChairs ([`dataset_flyingchairs.py`](tfoptflow/dataset_flyingchairs.py)), FlyingThings3D ([`dataset_flyingthings3d.py`](tfoptflow/dataset_flyingthings3d.py)), and KITTI ([`dataset_kitti.py`](tfoptflow/dataset_kitti.py)). Anyone of them is a good starting point to figure out how to implement your own. 
+
+Please note that that this is not complicated work; the derived class does little beyond telling the base class which list of files are to be used for training, validation, and testing, leaving the heavy lifting to the base class.
+
+Once you have a data handler, you can pass it to a `ModelPWCNet` object and call its  `predict()` method to generate flow predictions for its test split, as shown in the [`pwcnet_predict.ipynb`](tfoptflow/pwcnet_predict.ipynb) notebook and the  [`pwcnet_predict.py`](tfoptflow/pwcnet_predict.py) script.
 
 ## Datasets <a name="datasets"></a>
 

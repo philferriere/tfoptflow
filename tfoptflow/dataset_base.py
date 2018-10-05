@@ -33,7 +33,6 @@ _DEFAULT_DS_TRAIN_OPTIONS = {
     'in_memory': False,  # True loads all samples upfront, False loads them on-demand
     'crop_preproc': (384, 448),  # None or (h, w), use (384, 768) for FlyingThings3D
     'scale_preproc': None,  # None or (h, w),
-    'input_channels': 3,  # [1 | 3] input images number of color channels (greyscale or RGB images)
     # 'type': 'final',  # ['clean' | 'final'] for MPISintel, ['noc' | 'occ'] for KITTI, 'into_future' for FlyingThings3D
     'tb_test_imgs': False,  # If True, make test images available to model in training mode
     # Sampling and split options
@@ -54,7 +53,6 @@ _DEFAULT_DS_TUNE_OPTIONS = {
     'in_memory': False,  # True loads all samples upfront, False loads them on-demand
     'crop_preproc': (384, 768),  # None or (h, w), use (384, 768) for FlyingThings3D
     'scale_preproc': None,  # None or (h, w),
-    'input_channels': 3,  # [1 | 3] input images number of color channels (greyscale or RGB images)
     # ['clean' | 'final'] for MPISintel, ['noc' | 'occ'] for KITTI, 'into_future' for FlyingThings3D
     'type': 'into_future',
     'tb_test_imgs': False,  # If True, make test images available to model in training mode
@@ -76,7 +74,6 @@ _DEFAULT_DS_VAL_OPTIONS = {
     'in_memory': False,  # True loads all samples upfront, False loads them on-demand
     'crop_preproc': None,  # None or (h, w),
     'scale_preproc': None,  # None or (h, w),
-    'input_channels': 3,  # [1 | 3] input images number of color channels (greyscale or RGB images)
     'type': 'final',  # ['clean' | 'final'] for MPISintel, ['noc' | 'occ'] for KITTI, 'into_future' for FlyingThings3D
     # Sampling and split options
     'random_seed': 1969,  # random seed used for sampling
@@ -90,13 +87,12 @@ _DEFAULT_DS_TEST_OPTIONS = {
     'in_memory': False,  # True loads all samples upfront, False loads them on-demand
     'crop_preproc': None,  # None or (h, w),
     'scale_preproc': None,  # None or (h, w),
-    'input_channels': 3,  # [1 | 3] input images number of color channels (greyscale or RGB images)
     'type': 'final',  # ['clean' | 'final'] for MPISintel, ['noc' | 'occ'] for KITTI, 'into_future' for FlyingThings3D
     # Sampling and split options
     'random_seed': 1969,  # random seed used for sampling
     'val_split': 0.03,  # portion of data reserved for the validation split
     # Augmentation options
-    'aug_type': None,  # in [None, 'basic', 'heavy'] to add augmented data to training set
+    # 'aug_type': None,  # in [None, 'basic', 'heavy'] to add augmented data to training set
 }
 
 
@@ -564,9 +560,11 @@ class OpticalFlowDataset(object):
         Args:
             idx: List of sample indices to return
             as_tuple: If True, return image pairs as tuples; otherwise, return them as np arrays in [2, H, W, 3] format
+            simple_IDs: If True, return concatenated IDs; otherwise, return individual image and label IDs
         Returns:
             images: List of RGB images in format list(([H, W, 3],[H, W, 3])) or list([2, H, W, 3])
             labels: List of labels in format list([H, W, 2])
+            IDs: List of IDs in format list(str) or list([str,str,str])
         """
         images, labels, IDs = [], [], []
         for l in idx:
@@ -619,9 +617,11 @@ class OpticalFlowDataset(object):
         Args:
             idx: List of sample indices to return
             as_tuple: If True, return image pairs as tuples; otherwise, return them as np arrays in [2, H, W, 3] format
+            simple_IDs: If True, return concatenated IDs; otherwise, return individual image and label IDs
         Returns:
             images: List of RGB images in format list(([H, W, 3],[H, W, 3])) or list([2, H, W, 3])
             labels: List of labels in format list([H, W, 2])
+            IDs: List of IDs in format list(str) or list([str,str,str])
         """
         images, labels, IDs = [], [], []
         for l in idx:
@@ -670,17 +670,17 @@ class OpticalFlowDataset(object):
         Args:
             idx: List of sample indices to return
             as_tuple: If True, return image pairs as tuples; otherwise, return them as np arrays in [2, H, W, 3] format
+            simple_IDs: If True, return concatenated IDs; otherwise, return individual image and label IDs
         Returns:
             images: List of RGB images in format list(([H, W, 3],[H, W, 3])) or list([2, H, W, 3])
             labels: List of labels in format list([H, W, 2])
             pred_labels: List of predicted labels in format list([H, W, 2])
+            IDs: List of IDs in format list(str) or list([str,str,str])
         """
         images, labels, IDs = self._get_val_samples(idx, as_tuple=as_tuple, simple_IDs=simple_IDs)
 
         pred_labels = []
         for l in idx:
-            # pred_label_path = self._lbl_val_path[l].replace(self._val_lbl_dir, self._val_pred_lbl_dir)
-            # pred_label_path = self._pred_lbl_val_path[l].replace('.pfm', '.flo').replace('.png', '.flo')
             if os.path.exists(self._pred_lbl_val_path[l]):
                 pred_label = self._load_sample(None, self._pred_lbl_val_path[l], preprocess=False, as_tuple=as_tuple)
                 pred_labels.append(pred_label)
@@ -692,18 +692,17 @@ class OpticalFlowDataset(object):
         Args:
             as_tuple: If True, return image pairs as tuples; otherwise, return them as np arrays in [2, H, W, 3] format
             idx: List of sample indices to return
+            simple_IDs: If True, return concatenated IDs; otherwise, return individual image and label IDs
         Returns:
             images: List of RGB images in format list(([H, W, 3],[H, W, 3])) or list([2, H, W, 3])
             labels: List of labels in format list([H, W, 2])
             pred_label_paths: List of paths to the predicted labels
+            IDs: List of IDs in format list(str) or list([str,str,str])
         """
         images, labels, IDs = self._get_val_samples(idx, as_tuple=as_tuple, simple_IDs=simple_IDs)
 
         pred_label_paths = []
         for l in idx:
-            # pred_label_path = self._lbl_val_path[l].replace(self._val_lbl_dir, self._val_pred_lbl_dir)
-            # Always output to '.flo'
-            # pred_label_path = pred_label_path.replace('.pfm', '.flo').replace('.png', '.flo')
             pred_label_paths.append(self._pred_lbl_val_path[l])
 
         return images, labels, pred_label_paths, IDs
@@ -713,9 +712,11 @@ class OpticalFlowDataset(object):
         Args:
             idx: List of sample indices to return
             as_tuple: If True, return image pairs as tuples; otherwise, return them as np arrays in [2, H, W, 3] format
+            simple_IDs: If True, return concatenated IDs; otherwise, return individual image and label IDs
         Returns:
             images: List of RGB images in format list(([H, W, 3],[H, W, 3])) or list([2, H, W, 3])
             pred_labels: List of predicted labels in format list([H, W, 2])
+            IDs: List of IDs in format list(str) or list([str,str,str])
         """
         images, pred_labels, IDs = [], [], []
         for l in idx:
@@ -724,8 +725,6 @@ class OpticalFlowDataset(object):
             else:
                 image = self._load_sample(self._img_tst_path[l], preprocess=False, as_tuple=as_tuple)
             images.append(image)
-            # pred_label_path = self._img_tst_path[l][0].replace(self._tst_dir, self._tst_pred_lbl_dir)
-            # pred_label_path = pred_label_path.replace(self._tst_IDs[l][0], self._tst_IDs[l][2])
             if os.path.exists(self._pred_lbl_tst_path[l]):
                 pred_label = self._load_sample(
                     None,
@@ -745,9 +744,11 @@ class OpticalFlowDataset(object):
         Args:
             idx: List of sample indices to return
             as_tuple: If True, return image pairs as tuples; otherwise, return them as np arrays in [2, H, W, 3] format
+            simple_IDs: If True, return concatenated IDs; otherwise, return individual image and label IDs
         Returns:
             images: List of RGB images in format list(([H, W, 3],[H, W, 3])) or list([2, H, W, 3])
             pred_label_paths: List of paths to the predicted labels
+            IDs: List of IDs in format list(str) or list([str,str,str])
         """
         images, pred_label_paths, IDs = [], [], []
         for l in idx:
@@ -756,8 +757,6 @@ class OpticalFlowDataset(object):
             else:
                 image = self._load_sample(self._img_tst_path[l], preprocess=False, as_tuple=as_tuple)
             images.append(image)
-            # pred_label_path = self._img_tst_path[l][0].replace(self._tst_dir, self._tst_pred_lbl_dir)
-            # pred_label_path = pred_label_path.replace(self._tst_IDs[l][0], self._tst_IDs[l][2])
             pred_label_paths.append(self._pred_lbl_tst_path[l])
             if simple_IDs is True:
                 IDs.append(self._tst_IDs_simpl[l])
@@ -790,10 +789,12 @@ class OpticalFlowDataset(object):
             simple_IDs: If True, return concatenated IDs; otherwise, return individual image and label IDs
         In training and validation mode, returns:
             images: Batch of image pairs in format [num_samples, 2, H, W, 3] or list([2, H, W, 3])
-            labels: Batch of optical flows in format [num_samples, H, W, 2]
+            labels: Batch of optical flows in format [num_samples, H, W, 2] or list([H, W, 2])
+            IDs: List of ID strings in list or np.ndarray format
         In testing mode, returns:
             images: Batch of image pairs in format [num_samples, 2, H, W, 3]
             output_files: List of output file names that match the input file names
+            IDs: List of ID strings in list or np.ndarray format
         """
         assert(idx is not None or num_samples > 0)
 
@@ -890,7 +891,7 @@ class OpticalFlowDataset(object):
                 else:
                     idx = np.random.choice(self._tst_idx, size=num_samples, replace=False)
 
-            images, pred_labels, IDs = self._get_test_samples_with_preds(idx, as_tuple=as_tuple)
+            images, pred_labels, IDs = self._get_test_samples_with_preds(idx, as_tuple=as_tuple, simple_IDs=simple_IDs)
 
             if as_list:
                 return images, pred_labels, IDs
@@ -904,7 +905,8 @@ class OpticalFlowDataset(object):
                 else:
                     idx = np.random.choice(self._tst_idx, size=num_samples, replace=False)
 
-            images, pred_label_paths, IDs = self._get_test_samples_with_pred_paths(idx, as_tuple=as_tuple)
+            images, pred_label_paths, IDs = self._get_test_samples_with_pred_paths(
+                idx, as_tuple=as_tuple, simple_IDs=simple_IDs)
 
             if as_list:
                 return images, pred_label_paths, IDs
@@ -1020,11 +1022,12 @@ class OpticalFlowDataset(object):
         Args:
             idx: Index of unique sample to return
         Returns:
-            image: Image in [2, H, W, 3] format
+            x: Image pair in [2, H, W, 3] format
+            path: string, destination path where to save the predicted flow
             ID: string, sample ID
         """
-        image, ID = self.get_samples(idx=[idx], split='test', as_list=False, simple_IDs=True)
-        return np.squeeze(image), ID[0]
+        x, path, ID = self.get_samples(idx=[idx], split='test_with_pred_paths', as_list=False, simple_IDs=True)
+        return np.squeeze(x), path[0], ID[0]
 
     def get_tf_ds(self, batch_size=1, num_gpus=1, split='train', sess=None):
         """Get a tf.data.Dataset "view" or the dataset
@@ -1073,7 +1076,7 @@ class OpticalFlowDataset(object):
             tf_ds = tf.data.Dataset.from_tensor_slices(self._tst_idx)
             tf_ds = tf_ds.apply(tf.contrib.data.shuffle_and_repeat(buffer_size=len(self._tst_idx), count=-1))
             tf_ds = tf_ds.apply(tf.contrib.data.map_and_batch(
-                map_func=lambda idx: tf.py_func(self._test_stub, [idx], [tf.uint8, tf.string]),
+                map_func=lambda idx: tf.py_func(self._test_stub, [idx], [tf.uint8, tf.string, tf.string]),
                 batch_size=batch_size * num_gpus, num_parallel_batches=threads))
 
         # Return tf dataset

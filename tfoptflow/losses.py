@@ -11,7 +11,8 @@ Based on:
     - https://github.com/NVlabs/PWC-Net/blob/master/Caffe/model/train.prototxt
         Copyright (C) 2018 NVIDIA Corporation. All rights reserved. Licensed under the CC BY-NC-SA 4.0 license
     - https://github.com/daigo0927/PWC-Net_tf/blob/master/losses.py
-        Copyright (C) 2018 Daigo Hirooka
+        Written by Daigo Hirooka, Copyright (c) 2018 Daigo Hirooka
+        MIT License
 
 Ref:
     Per page 4 of paper, section "Training loss," the loss function used in regular training mode is the same as the
