@@ -56,6 +56,8 @@ Pre-trained models can be found [here](http://bit.ly/tfoptflow). They come in tw
 
 Please note that we trained these models using slightly different dataset and learning rate schedules. The official multistep schedule discussed in [[2018a]](#2018a) is as follows: S<sub>long</sub> 1.2M iters training, batch size 8 + S<sub>fine</sub> 500k iters finetuning, batch size 4). Ours is S<sub>long</sub> only, 1.2M iters, batch size 8, on a mix of `FlyingChairs` and `FlyingThings3DHalfRes`. `FlyingThings3DHalfRes` is our own version of `FlyingThings3D` where every input image pair and groundtruth flow has been **downsampled by two** in each dimension. We also use a **different set of augmentation techniques**.
 
+## Model performance
+
 | Model name | Notebooks | FlyingChairs (384x512) AEPE | Sintel clean (436x1024) AEPE | Sintel final (436x1024) AEPE |
 | :---: | :---: | :---: | :---: | :---: |
 | `pwcnet-lg-6-2-multisteps-chairsthingsmix` | [train](tfoptflow/pwcnet_train_lg-6-2-multisteps-chairsthingsmix.ipynb) | 1.44 ([notebook](tfoptflow/pwcnet_eval_lg-6-2-multisteps-chairsthingsmix_flyingchairs.ipynb)) | 2.60 ([notebook](tfoptflow/pwcnet_eval_lg-6-2-multisteps-chairsthingsmix_mpisintelclean.ipynb)) | 3.70 ([notebook](tfoptflow/pwcnet_eval_lg-6-2-multisteps-chairsthingsmix_mpisintelfinal.ipynb)) |
@@ -65,6 +67,8 @@ As a reference, here are the official, reported results:
 
 ![](img/pwc-net-results.png)
 
+## Model inference times
+
 We also measured the following MPI-Sintel (436 x 1024) inference times on a few GPUs:
 
 | Model name |  Titan X  |  GTX 1080  |  GTX 1080 Ti  |
@@ -72,6 +76,13 @@ We also measured the following MPI-Sintel (436 x 1024) inference times on a few 
 | `pwcnet-lg-6-2-cyclic-chairsthingsmix` | 90ms | 81ms | 68ms |
 | `pwcnet-sm-6-2-cyclic-chairsthingsmix` | 68.5ms | 64.4ms | 53.8ms |
 
+A few clarifications about the numbers above...
+
+First, please note that this implementation is, by design, portable, i.e., it doesn't use any user-defined CUDA kernels whereas the official NVidia implementation does. Ours will work on any OS and any hardware configuration (even one without a GPU) that can run TensorFlow.
+
+Second, the timing numbers we report are the inference times of the models trained on `FlyingChairs` and `FlyingThings3DHalfRes`. These are models that you can train longer if you want to, or finetune using an additional dataset, should you want to do so. In other words, **these graphs haven't been frozen yet**.
+
+In a typical production environment, you would freeze the model after final training/finetuning and optimize the graph to whatever platform(s) you need to distribute them on using TensorFlow XLA or TensorRT. In that important context, **the inference numbers we report on unoptimized graphs are rather meaningless**.
 
 # PWC-Net <a name="pwc-net"></a>
 
@@ -263,7 +274,7 @@ Once you have a data handler, you can pass it to a `ModelPWCNet` object and call
 
 Datasets most commonly used for optical flow estimation include:
 
-- FlyingThings3D [[image pairs](https://lmb.informatik.uni-freiburg.de/data/SceneFlowDatasets_CVPR16/Release_april16/data/FlyingThings3D/raw_data/flyingthings3d__frames_cleanpass.tar) + [flows](https://lmb.informatik.uni-freiburg.de/data/SceneFlowDatasets_CVPR16/Release_april16/data/FlyingThings3D/derived_data/flyingthings3d__optical_flow.tar.bz2)]
+- FlyingThings3D [[image pairs](https://lmb.informatik.uni-freiburg.de/data/SceneFlowDatasets_CVPR16/Release_april16/data/FlyingThings3D/raw_data/flyingthings3d__frames_cleanpass.tar) + [flows](https://lmb.informatik.uni-freiburg.de/data/SceneFlowDatasets_CVPR16/Release_april16/data/FlyingThings3D/derived_data/flyingthings3d__optical_flow.tar.bz2) + [all_unused_files.txt](https://lmb.informatik.uni-freiburg.de/resources/datasets/SceneFlow/assets/all_unused_files.txt)]
 - FlyingChairs [[images pairs + flows](https://lmb.informatik.uni-freiburg.de/data/FlyingChairs/FlyingChairs.zip) + [FlyingChairs_train_val split](https://lmb.informatik.uni-freiburg.de/resources/datasets/FlyingChairs/FlyingChairs_train_val.txt)]
 - MPI Sintel [[zip]](http://files.is.tue.mpg.de/sintel/MPI-Sintel-complete.zip)
 - KITTI Flow 2012 [[zip]](http://www.cvlibs.net/download.php?file=data_stereo_flow.zip) and/or KITTI Flow 2015 [[zip]](http://www.cvlibs.net/download.php?file=data_scene_flow.zip)
