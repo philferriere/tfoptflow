@@ -191,6 +191,11 @@ class ModelBase:
     ###
     # Model mgmt
     ###
+    def save_model(self):
+        """Save model. Override this.
+        """
+        raise NotImplementedError
+
     def build_model(self):
         """Build model. Override this.
         """

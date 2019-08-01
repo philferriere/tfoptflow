@@ -236,6 +236,23 @@ class ModelPWCNet(ModelBase):
     ###
     # Model mgmt
     ###
+    def save_model(self, export_dir):
+        """Save model
+        Used for saving the model in the SavedModel format. Allows for simple interfacing with ONNX conversion
+        """
+        if self.opts['verbose']:
+            print("Saving model...")
+        assert(self.num_gpus <= 1)
+
+        # Save the backbone neural nets
+        with self.graph.as_default():
+            flow_pred_tnsr = tf.identity(self.flow_pred_tnsr, 'flow_pred_tnsr')
+            tf.saved_model.simple_save(self.sess, export_dir, inputs={'x_tnsr': self.x_tnsr},
+                                   outputs={'flow_pred_tnsr': flow_pred_tnsr})
+
+        if self.opts['verbose']:
+            print("... model saved.")
+
     def build_model(self):
         """Build model
         Called by the base class when building the TF graph to setup the list of output tensors
